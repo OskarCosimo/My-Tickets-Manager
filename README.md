@@ -11,7 +11,7 @@
 * **Dynamic & Responsive UI**: Collapsible sidebar with mobile-first responsive layout and multi-language support.
 * **Event Hook Plugin Engine**: Modular architecture allowing custom extensions (e.g., Discord webhook notifications) without modifying core source files.
 * **Automated Translations (i18n)**: JSON-based internationalization featuring an automated translator tool powered by **LibreTranslate**.
-* **MYETV SSO & OAuth Integration**: Support for login and registration via MYETV, Google, and Facebook accounts.
+* **MYETV SSO & OAuth Integration**: Support for login and registration via MYETV, Google, Microsoft and Facebook accounts.
 * **Cloudflare Turnstile Captcha**: Built-in protection against spam and automated bots on forms.
 * **Custom SMTP Mailing**: Support for PHPMailer or native PHP `mail()` for notification dispatches.
 
