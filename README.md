@@ -1,6 +1,6 @@
 # My Tickets Manager 🎟️
 
-**My Tickets Manager** is a lightweight, modern, and highly configurable open-source ticket management system built from scratch using PHP 8, MySQL/MariaDB, and Bootstrap 5. Designed for simplicity, speed, and privacy, it allows both registered users and unauthenticated guests to submit and track support requests effortlessly.
+**My Tickets Manager** is a lightweight, modern, and highly configurable open-source help desk system built from scratch using PHP 8, MySQL/MariaDB, and Bootstrap 5. Designed for simplicity, speed, and privacy, it allows both registered users and unauthenticated guests to submit and track support requests effortlessly.
 
 ---
 
