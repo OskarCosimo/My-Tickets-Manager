@@ -1,7 +1,7 @@
 <?php
 // includes/config.php
 // Core configuration and DB connection
-
+require_once __DIR__ . '/rate_limiter.php';
 require_once __DIR__ . '/i18n.php';
 
 define('DB_HOST', 'localhost');
