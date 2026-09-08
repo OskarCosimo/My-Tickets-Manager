@@ -45,6 +45,15 @@ CREATE TABLE IF NOT EXISTS `users` (
   UNIQUE KEY `uk_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE IF NOT EXISTS `rate_limits` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `action_key` varchar(50) NOT NULL,
+  `ip_address` varchar(45) NOT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_action_ip_created` (`action_key`, `ip_address`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE IF NOT EXISTS `tickets` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `tracking_code` varchar(12) NOT NULL,
