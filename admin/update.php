@@ -14,9 +14,12 @@ if (!isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'admin') {
 $message = '';
 $error = '';
 
+// Dynamically obtain the exact absolute path of the application root
+$appRootPath = realpath(__DIR__ . '/../');
+
 // Check write permissions for the codebase
 $unwritableFiles = [];
-$isSystemWritable = check_system_writable(__DIR__ . '/../', $unwritableFiles);
+$isSystemWritable = check_system_writable($appRootPath, $unwritableFiles);
 
 $updateInfo = check_for_updates();
 
@@ -28,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['run_update'])) {
         if ($result['success']) {
             $message = "System updated successfully to version " . htmlspecialchars($updateInfo['version']) . "!";
             $updateInfo = check_for_updates(); // Re-check version info after update
-            $isSystemWritable = check_system_writable(__DIR__ . '/../', $unwritableFiles);
+            $isSystemWritable = check_system_writable($appRootPath, $unwritableFiles);
         } else {
             $error = "Update failed: " . htmlspecialchars($result['error']);
         }
@@ -67,15 +70,16 @@ require_once __DIR__ . '/../includes/sidebar.php';
                         <div class="alert alert-danger">
                             <h5 class="alert-heading"><i class="fa-solid fa-lock me-1"></i> Write Permissions Required</h5>
                             <p class="mb-2">Automatic update is disabled because the web server user does not have write permissions on all files and directories.</p>
-                            <p class="mb-2">Please execute the following command in your server terminal to grant permissions:</p>
-                            <code class="d-block p-2 bg-dark text-white rounded mb-3">sudo chown -R www-data:www-data /var/www/html && sudo chmod -R 755 /var/www/html</code>
+                            <p class="mb-2">Please execute the following command in your server terminal to grant permissions for this specific application root:</p>
+                            
+                            <code class="d-block p-2 bg-dark text-white rounded mb-3">sudo chown -R www-data:www-data <?php echo htmlspecialchars($appRootPath); ?> && sudo chmod -R 755 <?php echo htmlspecialchars($appRootPath); ?></code>
                             
                             <?php if (!empty($unwritableFiles)): ?>
                                 <hr>
                                 <h6>Unwritable Items Detected (<?php echo count($unwritableFiles); ?>):</h6>
                                 <ul class="small mb-0">
                                     <?php foreach (array_slice($unwritableFiles, 0, 5) as $file): ?>
-                                        <li><code><?php echo htmlspecialchars(str_replace(realpath(__DIR__ . '/../'), '', $file)); ?></code></li>
+                                        <li><code><?php echo htmlspecialchars(str_replace($appRootPath, '', $file)); ?></code></li>
                                     <?php endforeach; ?>
                                     <?php if (count($unwritableFiles) > 5): ?>
                                         <li><em>...and <?php echo count($unwritableFiles) - 5; ?> more items.</em></li>
