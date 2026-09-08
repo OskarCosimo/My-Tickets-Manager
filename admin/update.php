@@ -70,10 +70,19 @@ require_once __DIR__ . '/../includes/sidebar.php';
                         <div class="alert alert-danger">
                             <h5 class="alert-heading"><i class="fa-solid fa-lock me-1"></i> Write Permissions Required</h5>
                             <p class="mb-2">Automatic update is disabled because the web server user does not have write permissions on all files and directories.</p>
-                            <p class="mb-2">Please execute the following command in your server terminal to grant permissions for this specific application root:</p>
                             
+                            <p class="mb-2"><strong>Option 1: Fix Permissions via Terminal</strong></p>
+                            <p class="mb-1 small">If you have SSH access, execute the following command:</p>
                             <code class="d-block p-2 bg-dark text-white rounded mb-3">sudo chown -R www-data:www-data <?php echo htmlspecialchars($appRootPath); ?> && sudo chmod -R 755 <?php echo htmlspecialchars($appRootPath); ?></code>
                             
+                            <hr>
+
+                            <p class="mb-2"><strong>Option 2: Manual Update via FTP / File Manager</strong></p>
+                            <p class="mb-2 small">If you don't have SSH access, you can download the release package manually and overwrite your files:</p>
+                            <a href="<?php echo htmlspecialchars($updateInfo['download_url']); ?>" class="btn btn-outline-danger btn-sm mb-3" target="_blank" rel="noopener">
+                                <i class="fa-solid fa-file-arrow-down me-1"></i> Download v<?php echo htmlspecialchars($updateInfo['version']); ?> Package (.zip)
+                            </a>
+
                             <?php if (!empty($unwritableFiles)): ?>
                                 <hr>
                                 <h6>Unwritable Items Detected (<?php echo count($unwritableFiles); ?>):</h6>
