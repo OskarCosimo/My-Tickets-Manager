@@ -80,12 +80,17 @@ function sendResetEmail(PDO $pdo, array $user) {
     $resetUrl = "{$protocol}://{$domain}/reset_password.php?token=" . $token;
 
     $subject = "Password Reset Request - " . get_setting($pdo, 'site_title', 'Tickets Manager');
-    $body = "Hello " . htmlspecialchars($user['username'] ?? 'User') . ",\n\n";
-    $body .= "We received a request to reset your password. Click the link below to set a new password:\n\n";
-    $body .= $resetUrl . "\n\n";
-    $body .= "This link will expire in 1 hour. If you did not request this reset, please ignore this email.\n";
+    $recipientName = $user['username'] ?? 'User';
 
-    send_system_email($user['email'], $subject, $body);
+    $body  = "<h3>Password Reset Request</h3>";
+    $body .= "<p>Hello <strong>" . htmlspecialchars($recipientName) . "</strong>,</p>";
+    $body .= "<p>We received a request to reset your password. Click the link below to set a new password:</p>";
+    $body .= "<p><a href='{$resetUrl}' style='display:inline-block; padding:10px 15px; background:#007bff; color:#fff; text-decoration:none; border-radius:4px;'>Reset Password</a></p>";
+    $body .= "<p>Or copy and paste this link into your browser:<br><a href='{$resetUrl}'>{$resetUrl}</a></p>";
+    $body .= "<p><small>This link will expire in 1 hour. If you did not request this reset, please ignore this email.</small></p>";
+
+    // Invia email usando la funzione definita in includes/mailer.php
+    send_ticket_email($pdo, $user['email'], $recipientName, $subject, $body);
 }
 
 require_once __DIR__ . '/includes/header.php';
