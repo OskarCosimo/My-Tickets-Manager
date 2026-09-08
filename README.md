@@ -92,10 +92,11 @@ The web installer will automatically:
 The system features an asynchronous AI queue system (`ai_queue` table) for automated ticket processing (e.g., auto-summarization or agent reply suggestions).
 
 * Configure your AI provider settings (Endpoint, API Key, Model) in **Admin Panel -> Settings**.
-* Process pending AI jobs via cron job or CLI worker:
+* The queue system is already up and running builded with MYSQL without making a dedicated cronjob in the server
+* As optional feature you can also process pending AI jobs via cron job or CLI worker:
 
 ```bash
-php cron/process_ai_queue.php
+php api/process_ai_queue.php
 
 ```
 
