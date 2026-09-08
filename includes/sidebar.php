@@ -34,6 +34,9 @@ $isAdmin    = $userRole === 'admin';
                 <i class="fa-solid fa-ticket me-2"></i><span class="link-text"><?php echo __('tickets', 'Tickets'); ?></span>
             </a>
             <?php if ($isAdmin): ?>
+                <a href="/admin/users.php" class="list-group-item list-group-item-action bg-transparent text-white border-0" title="<?php echo __('users', 'Users'); ?>">
+                    <i class="fa-solid fa-users-gear me-2"></i><span class="link-text"><?php echo __('users', 'Users'); ?></span>
+                </a>
                 <a href="/admin/categories.php" class="list-group-item list-group-item-action bg-transparent text-white border-0" title="<?php echo __('categories', 'Categories'); ?>">
                     <i class="fa-solid fa-folder me-2"></i><span class="link-text"><?php echo __('categories', 'Categories'); ?></span>
                 </a>
