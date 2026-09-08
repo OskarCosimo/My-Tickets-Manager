@@ -43,6 +43,9 @@ $isAdmin    = $userRole === 'admin';
                 <a href="/admin/settings.php" class="list-group-item list-group-item-action bg-transparent text-white border-0" title="<?php echo __('settings', 'Settings'); ?>">
                     <i class="fa-solid fa-sliders me-2"></i><span class="link-text"><?php echo __('settings', 'Settings'); ?></span>
                 </a>
+                <a href="/admin/rate_limits.php" class="list-group-item list-group-item-action bg-transparent text-white border-0" title="<?php echo __('rate_limits', 'Rate Limits'); ?>">
+                    <i class="fa-solid fa-gauge-high me-2"></i><span class="link-text"><?php echo __('rate_limits', 'Rate Limits'); ?></span>
+                </a>
                 <a href="/admin/translations.php" class="list-group-item list-group-item-action bg-transparent text-white border-0" title="<?php echo __('translations', 'Translations'); ?>">
                     <i class="fa-solid fa-language me-2"></i><span class="link-text"><?php echo __('translations', 'Translations'); ?></span>
                 </a>
