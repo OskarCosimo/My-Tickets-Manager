@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `two_factor_enabled` tinyint(1) NOT NULL DEFAULT '0',
   `reset_token` varchar(64) DEFAULT NULL,
   `reset_token_expires` datetime DEFAULT NULL,
-  `role` enum('user','agent','admin') DEFAULT 'user',
+  `role` varchar(20) NOT NULL DEFAULT 'user',
   `auth_provider` varchar(20) DEFAULT 'local',
   `auth_provider_id` varchar(100) DEFAULT NULL,
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
