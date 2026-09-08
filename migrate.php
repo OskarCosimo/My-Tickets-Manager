@@ -25,6 +25,21 @@ if (!isset($pdo) || !($pdo instanceof PDO)) {
 }
 
 /**
+ * Helper: Check if a table exists in the database
+ */
+if (!function_exists('table_exists')) {
+    function table_exists(PDO $pdo, string $table): bool {
+        try {
+            $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
+            $stmt->execute([$table]);
+            return (bool) $stmt->fetch();
+        } catch (Exception $e) {
+            return false;
+        }
+    }
+}
+
+/**
  * Helper: Check if a column exists in a given table
  */
 if (!function_exists('column_exists')) {
@@ -56,12 +71,24 @@ if (!function_exists('index_exists')) {
 
 try {
     // --- INCREMENTAL DB MIGRATIONS HERE ---
-    // Example:
-    // if (!column_exists($pdo, 'users', 'two_factor_secret')) { ... }
 
-    //v1.0.2
+    // v1.0.2: Add Password Reset Tokens
     if (!column_exists($pdo, 'users', 'reset_token')) {
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `reset_token` VARCHAR(64) DEFAULT NULL, ADD COLUMN `reset_token_expires` DATETIME DEFAULT NULL");
+    }
+
+    // v1.0.5: Create Rate Limits Table for Brute-Force and Spam Protection
+    if (!table_exists($pdo, 'rate_limits')) {
+        $pdo->exec("
+            CREATE TABLE `rate_limits` (
+              `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+              `action_key` VARCHAR(50) NOT NULL,
+              `ip_address` VARCHAR(45) NOT NULL,
+              `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+              PRIMARY KEY (`id`),
+              KEY `idx_action_ip_created` (`action_key`, `ip_address`, `created_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
     }
 
 } catch (Exception $e) {
