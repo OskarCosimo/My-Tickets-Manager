@@ -1,0 +1,347 @@
+<?php
+// admin/settings.php
+// Admin configuration settings page with OAuth providers and Dynamic Redirect URIs
+session_start();
+require_once __DIR__ . '/../includes/config.php';
+
+// Ensure user is authorized as Admin
+if (!isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'admin') {
+    header("Location: /login.php");
+    exit;
+}
+
+$success = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    foreach ($_POST['settings'] as $key => $value) {
+        $stmt = $pdo->prepare("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+        $stmt->execute([$key, trim($value)]);
+    }
+    $success = 'Settings updated successfully.';
+}
+
+require_once __DIR__ . '/../includes/header.php';
+require_once __DIR__ . '/../includes/sidebar.php';
+
+// Build dynamic Callback Redirect URIs based on the current HTTP host
+$scheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? "https" : "http";
+$baseUrl = $scheme . "://" . $_SERVER['HTTP_HOST'];
+
+$myetvCallbackUrl   = $baseUrl . '/auth/myetv-callback.php';
+$googleCallbackUrl  = $baseUrl . '/auth/google-callback.php';
+$fbCallbackUrl      = $baseUrl . '/auth/facebook-callback.php';
+$msCallbackUrl      = $baseUrl . '/auth/microsoft-callback.php';
+?>
+
+<main class="main-content">
+    <div class="container-fluid">
+        <h2>System Settings</h2>
+        <hr>
+
+        <?php if ($success): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
+
+        <form method="POST" action="settings.php">
+            <!-- General Settings -->
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-secondary text-white">General Configuration</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Site Title</label>
+                        <input type="text" name="settings[site_title]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'site_title')); ?>">
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="hidden" name="settings[allow_guest_tickets]" value="0">
+                        <input type="checkbox" name="settings[allow_guest_tickets]" value="1" class="form-check-input" id="allowGuest" <?php echo get_setting($pdo, 'allow_guest_tickets') === '1' ? 'checked' : ''; ?>>
+                        <label class="form-check-label" for="allowGuest">Allow Guest Ticket Submissions</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- OAuth SSO Settings -->
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-dark text-white"><i class="fa-solid fa-key me-2"></i> OAuth & SSO Login Providers</div>
+                <div class="card-body">
+                    
+                    <!-- MYETV OAuth -->
+                    <h5>MYETV Integration</h5>
+                    <div class="mb-3 form-check">
+                        <input type="hidden" name="settings[oauth_myetv_enabled]" value="0">
+                        <input type="checkbox" name="settings[oauth_myetv_enabled]" value="1" class="form-check-input" id="myetvAuth" <?php echo get_setting($pdo, 'oauth_myetv_enabled') === '1' ? 'checked' : ''; ?>>
+                        <label class="form-check-label fw-bold" for="myetvAuth">Enable MYETV Login</label>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label">MYETV Client ID</label>
+                            <input type="text" name="settings[oauth_myetv_client_id]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'oauth_myetv_client_id')); ?>">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">MYETV Client Secret</label>
+                            <input type="password" name="settings[oauth_myetv_client_secret]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'oauth_myetv_client_secret')); ?>">
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label text-muted small fw-bold">OAuth Redirect Callback URL (Set in MYETV Developer Console)</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control form-control-sm bg-light" id="myetvCb" value="<?php echo htmlspecialchars($myetvCallbackUrl); ?>" readonly>
+                            <button class="btn btn-outline-secondary btn-sm" type="button" onclick="copyToClipboard('myetvCb')"><i class="fa-regular fa-copy me-1"></i> Copy</button>
+                        </div>
+                    </div>
+                    <hr>
+
+                    <!-- Google OAuth -->
+                    <h5>Google OAuth</h5>
+                    <div class="mb-3 form-check">
+                        <input type="hidden" name="settings[oauth_google_enabled]" value="0">
+                        <input type="checkbox" name="settings[oauth_google_enabled]" value="1" class="form-check-input" id="googleAuth" <?php echo get_setting($pdo, 'oauth_google_enabled') === '1' ? 'checked' : ''; ?>>
+                        <label class="form-check-label fw-bold" for="googleAuth">Enable Google Login</label>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Google Client ID</label>
+                            <input type="text" name="settings[oauth_google_client_id]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'oauth_google_client_id')); ?>">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Google Client Secret</label>
+                            <input type="password" name="settings[oauth_google_client_secret]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'oauth_google_client_secret')); ?>">
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label text-muted small fw-bold">Authorized Redirect URI (Set in Google Cloud Console)</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control form-control-sm bg-light" id="googleCb" value="<?php echo htmlspecialchars($googleCallbackUrl); ?>" readonly>
+                            <button class="btn btn-outline-secondary btn-sm" type="button" onclick="copyToClipboard('googleCb')"><i class="fa-regular fa-copy me-1"></i> Copy</button>
+                        </div>
+                    </div>
+                    <hr>
+
+                    <!-- Facebook OAuth -->
+                    <h5>Facebook OAuth</h5>
+                    <div class="mb-3 form-check">
+                        <input type="hidden" name="settings[oauth_facebook_enabled]" value="0">
+                        <input type="checkbox" name="settings[oauth_facebook_enabled]" value="1" class="form-check-input" id="fbAuth" <?php echo get_setting($pdo, 'oauth_facebook_enabled') === '1' ? 'checked' : ''; ?>>
+                        <label class="form-check-label fw-bold" for="fbAuth">Enable Facebook Login</label>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Facebook App ID</label>
+                            <input type="text" name="settings[oauth_facebook_client_id]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'oauth_facebook_client_id')); ?>">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Facebook App Secret</label>
+                            <input type="password" name="settings[oauth_facebook_client_secret]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'oauth_facebook_client_secret')); ?>">
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label text-muted small fw-bold">Valid OAuth Redirect URI (Set in Meta for Developers)</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control form-control-sm bg-light" id="fbCb" value="<?php echo htmlspecialchars($fbCallbackUrl); ?>" readonly>
+                            <button class="btn btn-outline-secondary btn-sm" type="button" onclick="copyToClipboard('fbCb')"><i class="fa-regular fa-copy me-1"></i> Copy</button>
+                        </div>
+                    </div>
+                    <hr>
+
+                    <!-- Microsoft OAuth -->
+                    <h5>Microsoft OAuth</h5>
+                    <div class="mb-3 form-check">
+                        <input type="hidden" name="settings[oauth_microsoft_enabled]" value="0">
+                        <input type="checkbox" name="settings[oauth_microsoft_enabled]" value="1" class="form-check-input" id="msAuth" <?php echo get_setting($pdo, 'oauth_microsoft_enabled') === '1' ? 'checked' : ''; ?>>
+                        <label class="form-check-label fw-bold" for="msAuth">Enable Microsoft Login</label>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Microsoft Application (Client) ID</label>
+                            <input type="text" name="settings[oauth_microsoft_client_id]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'oauth_microsoft_client_id')); ?>">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Microsoft Client Secret</label>
+                            <input type="password" name="settings[oauth_microsoft_client_secret]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'oauth_microsoft_client_secret')); ?>">
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label text-muted small fw-bold">Redirect URI (Set in Azure Portal App Registration)</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control form-control-sm bg-light" id="msCb" value="<?php echo htmlspecialchars($msCallbackUrl); ?>" readonly>
+                            <button class="btn btn-outline-secondary btn-sm" type="button" onclick="copyToClipboard('msCb')"><i class="fa-regular fa-copy me-1"></i> Copy</button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Artificial Intelligence Settings -->
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-dark text-white"><i class="fa-solid fa-robot me-2"></i> Artificial Intelligence Assistant</div>
+                <div class="card-body">
+                    <div class="mb-3 form-check">
+                        <input type="hidden" name="settings[ai_enabled]" value="0">
+                        <input type="checkbox" name="settings[ai_enabled]" value="1" class="form-check-input" id="enableAI" <?php echo get_setting($pdo, 'ai_enabled') === '1' ? 'checked' : ''; ?>>
+                        <label class="form-check-label fw-bold" for="enableAI">Enable AI Assistant</label>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">AI Provider</label>
+                            <?php $aiProvider = get_setting($pdo, 'ai_provider', 'gemini'); ?>
+                            <select name="settings[ai_provider]" class="form-select">
+                                <option value="gemini" <?php echo $aiProvider === 'gemini' ? 'selected' : ''; ?>>Google Gemini API (Cloud)</option>
+                                <option value="ollama" <?php echo $aiProvider === 'ollama' ? 'selected' : ''; ?>>Ollama (Local Open-Weight Models)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 form-check mt-4 ms-2">
+                            <input type="hidden" name="settings[ai_auto_respond]" value="0">
+                            <input type="checkbox" name="settings[ai_auto_respond]" value="1" class="form-check-input" id="autoAI" <?php echo get_setting($pdo, 'ai_auto_respond') === '1' ? 'checked' : ''; ?>>
+                            <label class="form-check-label" for="autoAI">Auto-Respond on New Ticket Creation</label>
+                        </div>
+                    </div>
+
+                    <!-- Gemini Settings -->
+                    <div class="border p-3 mb-3 bg-light rounded">
+                        <h6 class="fw-bold"><i class="fa-brands fa-google me-1"></i> Google Gemini Settings</h6>
+                        <div class="row">
+                            <div class="col-md-8 mb-2">
+                                <label class="form-label">Gemini API Key</label>
+                                <input type="password" name="settings[ai_gemini_api_key]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'ai_gemini_api_key')); ?>">
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label">Gemini Model</label>
+                                <input type="text" name="settings[ai_gemini_model]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'ai_gemini_model', 'gemini-1.5-flash')); ?>">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ollama Settings & Security Parameters -->
+                    <div class="border p-3 mb-3 bg-light rounded">
+                        <h6 class="fw-bold"><i class="fa-solid fa-server me-1"></i> Ollama Local Settings & Advanced Parameters</h6>
+                        <div class="row mb-3">
+                            <div class="col-md-8 mb-2">
+                                <label class="form-label">Ollama Server Endpoint URL</label>
+                                <input type="text" name="settings[ai_ollama_url]" class="form-control" placeholder="http://localhost:11434" value="<?php echo htmlspecialchars(get_setting($pdo, 'ai_ollama_url', 'http://localhost:11434')); ?>">
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label">Ollama Model Name</label>
+                                <input type="text" name="settings[ai_ollama_model]" class="form-control" placeholder="llama3, mistral, gemma" value="<?php echo htmlspecialchars(get_setting($pdo, 'ai_ollama_model', 'llama3')); ?>">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Context Window (num_ctx)</label>
+                                <input type="number" name="settings[ai_ollama_num_ctx]" class="form-control" placeholder="4096" value="<?php echo htmlspecialchars(get_setting($pdo, 'ai_ollama_num_ctx', '4096')); ?>">
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Temperature</label>
+                                <input type="text" name="settings[ai_ollama_temperature]" class="form-control" placeholder="0.7" value="<?php echo htmlspecialchars(get_setting($pdo, 'ai_ollama_temperature', '0.7')); ?>">
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Top K</label>
+                                <input type="number" name="settings[ai_ollama_top_k]" class="form-control" placeholder="40" value="<?php echo htmlspecialchars(get_setting($pdo, 'ai_ollama_top_k', '40')); ?>">
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Top P</label>
+                                <input type="text" name="settings[ai_ollama_top_p]" class="form-control" placeholder="0.9" value="<?php echo htmlspecialchars(get_setting($pdo, 'ai_ollama_top_p', '0.9')); ?>">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Custom Instructions -->
+                    <div class="mb-2">
+                        <label class="form-label fw-bold">Custom Instructions & Knowledge Rules</label>
+                        <textarea name="settings[ai_custom_instructions]" class="form-control" rows="4" placeholder="Specify custom rules for the AI (e.g. 'If asked about pricing, direct them to /pricing.php')..."><?php echo htmlspecialchars(get_setting($pdo, 'ai_custom_instructions')); ?></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Turnstile Settings -->
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-secondary text-white">Cloudflare Turnstile</div>
+                <div class="card-body">
+                    <div class="mb-3 form-check">
+                        <input type="hidden" name="settings[turnstile_enabled]" value="0">
+                        <input type="checkbox" name="settings[turnstile_enabled]" value="1" class="form-check-input" id="enableTurnstile" <?php echo get_setting($pdo, 'turnstile_enabled') === '1' ? 'checked' : ''; ?>>
+                        <label class="form-check-label" for="enableTurnstile">Enable Turnstile Captcha</label>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Site Key</label>
+                        <input type="text" name="settings[turnstile_site_key]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Secret Key</label>
+                        <input type="password" name="settings[turnstile_secret_key]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_secret_key')); ?>">
+                    </div>
+                </div>
+            </div>
+
+            <!-- SMTP Settings -->
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-secondary text-white">SMTP Email Settings</div>
+                <div class="card-body">
+                    <div class="mb-3 form-check">
+                        <input type="hidden" name="settings[smtp_enabled]" value="0">
+                        <input type="checkbox" name="settings[smtp_enabled]" value="1" class="form-check-input" id="enableSMTP" <?php echo get_setting($pdo, 'smtp_enabled') === '1' ? 'checked' : ''; ?>>
+                        <label class="form-check-label" for="enableSMTP">Enable Custom SMTP Server</label>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-5 mb-3">
+                            <label class="form-label">SMTP Host</label>
+                            <input type="text" name="settings[smtp_host]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'smtp_host')); ?>">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">SMTP Encryption</label>
+                            <?php $crypto = get_setting($pdo, 'smtp_crypto', 'tls'); ?>
+                            <select name="settings[smtp_crypto]" class="form-select">
+                                <option value="tls" <?php echo ($crypto === 'tls' || $crypto === 'starttls') ? 'selected' : ''; ?>>STARTTLS (Recommended / Port 587)</option>
+                                <option value="ssl" <?php echo $crypto === 'ssl' ? 'selected' : ''; ?>>SSL / SMTPS (Port 465)</option>
+                                <option value="none" <?php echo $crypto === 'none' ? 'selected' : ''; ?>>None / Plaintext (Port 25)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">SMTP Port</label>
+                            <input type="text" name="settings[smtp_port]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'smtp_port', '587')); ?>">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">SMTP Username</label>
+                            <input type="text" name="settings[smtp_user]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'smtp_user')); ?>">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">SMTP Password</label>
+                            <input type="password" name="settings[smtp_pass]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'smtp_pass')); ?>">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">From Email Address (Optional)</label>
+                        <input type="email" name="settings[smtp_from_email]" class="form-control" placeholder="no-reply@yourdomain.com" value="<?php echo htmlspecialchars(get_setting($pdo, 'smtp_from_email')); ?>">
+                        <div class="form-text">If left empty, the SMTP Username will be used as the sender address.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LibreTranslate API Settings -->
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-secondary text-white">LibreTranslate Automatic Translation Server</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">LibreTranslate Endpoint URL</label>
+                        <input type="url" name="settings[libretranslate_url]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'libretranslate_url', '[https://libretranslate.com](https://libretranslate.com)')); ?>">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dynamic Plugin Settings Hook Injection -->
+            <?php trigger_hook('admin_settings_form'); ?>
+
+            <button type="submit" class="btn btn-success btn-lg"><i class="fa-solid fa-floppy-disk me-1"></i> Save Settings</button>
+        </form>
+    </div>
+</main>
+
+<script>
+    function copyToClipboard(elementId) {
+        const copyText = document.getElementById(elementId);
+        copyText.select();
+        copyText.setSelectionRange(0, 99999);
+        navigator.clipboard.writeText(copyText.value);
+    }
+</script>
+
+<?php require_once __DIR__ . '/../includes/footer.php'; ?>
