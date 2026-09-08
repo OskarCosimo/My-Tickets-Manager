@@ -4,14 +4,17 @@
 
 ---
 
-## ✨ Features
+## ✨ Key Features
 
 * **Guest & Registered Ticket Creation**: Guests can submit tickets with just their name and email, receiving a unique tracking code and a secure access token via email.
+* **Web Installation Wizard**: Easy setup via `install.php` with automatic environment checks, database creation, and admin account setup.
+* **1-Click Automatic Updates**: In-app updater similar to WordPress that checks GitHub Releases for new code, applies incremental database migrations (`migrate.php`), and preserves existing configuration files.
+* **Two-Factor Authentication (2FA)**: TOTP-based 2FA support for local accounts and SSO logins.
+* **AI Assistance & Queue System**: Asynchronous background queue integration for AI-powered ticket summary and response assistance (supporting Ollama, OpenAI, etc.).
+* **SSO & OAuth Integration**: Single Sign-On integration for MYETV, Google, Microsoft, and Facebook accounts.
 * **Rich Text Editing**: Integrated with **My-WYSIWYG** for rich-text formatting directly on submit and reply textareas.
-* **Dynamic & Responsive UI**: Collapsible sidebar with mobile-first responsive layout and multi-language support.
-* **Event Hook Plugin Engine**: Modular architecture allowing custom extensions (e.g., Discord webhook notifications) without modifying core source files.
 * **Automated Translations (i18n)**: JSON-based internationalization featuring an automated translator tool powered by **LibreTranslate**.
-* **MYETV SSO & OAuth Integration**: Support for login and registration via MYETV, Google, Microsoft and Facebook accounts.
+* **Event Hook Plugin Engine**: Modular architecture allowing custom extensions (e.g., Discord webhook notifications) without modifying core source files.
 * **Cloudflare Turnstile Captcha**: Built-in protection against spam and automated bots on forms.
 * **Custom SMTP Mailing**: Support for PHPMailer or native PHP `mail()` for notification dispatches.
 
@@ -19,10 +22,14 @@
 
 ## 🛠️ System Requirements
 
-* **PHP**: `^8.0` or higher (with `pdo`, `pdo_mysql`, `curl`, and `json` extensions enabled).
-* **Database**: MySQL `^5.7` or MariaDB `^10.3`.
+* **PHP**: `^8.0` or higher with the following extensions enabled:
+  * `pdo_mysql`
+  * `curl`
+  * `zip` (required for automatic updates)
+  * `json`
+* **Database**: MySQL `^8.0` or MariaDB `^10.3`.
 * **Web Server**: Apache (`mod_rewrite` recommended) or Nginx.
-* **Permissions**: Write permissions on `/translations/` directory.
+* **File Permissions**: Write access for the web server user (`www-data` or `apache`) on the root directory for automated updates and configuration generation.
 
 ---
 
@@ -30,40 +37,76 @@
 
 ### Step 1: Clone the Repository
 ```bash
-git clone [https://github.com/OskarCosimo/my-tickets-manager.git](https://github.com/YOUR_USERNAME/my-tickets-manager.git)
-cd my-tickets-manager
+git clone [https://github.com/OskarCosimo/My-Tickets-Manager.git](https://github.com/OskarCosimo/My-Tickets-Manager.git)
+cd My-Tickets-Manager
 
 ```
 
-### Step 2: Set Up Directory Permissions
+### Step 2: Set Directory Permissions
 
-If you want to use libretranslate for translations, make sure the `translations/` directory is writable by your web server user (`www-data` or `apache`):
+Assign ownership to the web server user so the web installer can write `includes/config.php` and the updater can manage release extractions:
 
 ```bash
-chmod -R 775 translations/
-chown -R www-data:www-data translations/
+sudo chown -R www-data:www-data /var/www/html/My-Tickets-Manager
+sudo chmod -R 755 /var/www/html/My-Tickets-Manager
 
 ```
 
-### Step 3: Database Import
+### Step 3: Run the Web Installer
 
-Import the database schema using MySQL CLI or DBeaver:
+Open your browser and navigate to the installation wizard:
 
-```sql
-The database.sql file contains all the sql scripts to build your database
-```
-
-### Step 4: Configure Database Connection
-
-Edit `includes/config.php` and set your MySQL database credentials:
-
-```php
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'your_database_name');
-define('DB_USER', 'your_database_user');
-define('DB_PASS', 'your_database_password');
+```text
+[http://your-domain.com/install.php](http://your-domain.com/install.php)
 
 ```
+
+The web installer will automatically:
+
+1. Verify system requirements and write permissions.
+2. Prompt for database credentials and site settings.
+3. Import the database schema (`database.sql`).
+4. Create the initial Administrator account.
+5. Generate the `includes/config.php` configuration file.
+
+---
+
+## 🔄 Automatic System Updates
+
+**My Tickets Manager** includes a built-in update mechanism powered by GitHub Releases.
+
+1. Navigate to **Admin Panel -> System Updates** (`/admin/update.php`).
+2. The system queries GitHub Releases to check if a newer version is available.
+3. Clicking **Update System Now**:
+* Verifies file write permissions across the codebase.
+* Downloads the latest release archive from GitHub.
+* Extracts new files while protecting sensitive local files (`includes/config.php`, `.htaccess`, custom assets).
+* Runs incremental database schema migrations automatically (`migrate.php`).
+
+
+
+---
+
+## 🤖 AI Background Queue Integration
+
+The system features an asynchronous AI queue system (`ai_queue` table) for automated ticket processing (e.g., auto-summarization or agent reply suggestions).
+
+* Configure your AI provider settings (Endpoint, API Key, Model) in **Admin Panel -> Settings**.
+* Process pending AI jobs via cron job or CLI worker:
+
+```bash
+php cron/process_ai_queue.php
+
+```
+
+---
+
+## 🔒 Two-Factor Authentication (2FA)
+
+Users and administrators can enable TOTP 2FA (Google Authenticator, Authy, 1Password) from their **Account Settings** profile.
+
+* Works across both regular email/password logins and OAuth/SSO flows.
+* Requires entering a valid 6-digit verification code (`/login_2fa.php`) before accessing the account.
 
 ---
 
@@ -75,13 +118,13 @@ The application uses JSON files stored inside `/translations/` for UI strings:
 
 ### Creating Manual Translations
 
-You can manually create a new file named `translations/lang-[code].json` (e.g., `lang-it.json`) and translate the string key-value pairs.
+Create a file named `translations/lang-[code].json` (e.g., `lang-it.json`) and translate the key-value pairs.
 
 ### Automated Translations via LibreTranslate
 
 1. Go to **Admin Panel -> Settings** and set your **LibreTranslate Endpoint URL** (e.g., `http://your-libretranslate-server:5055/translate`).
 2. Go to **Admin Panel -> Translations**.
-3. Enter the target language code (e.g., `it`, `es`, `fr`) and click **Generate Translation JSON**. The system will automatically read `lang-en.json`, translate all strings using LibreTranslate, and write `lang-[code].json` to disk.
+3. Enter the target language code (e.g., `it`, `es`, `fr`) and click **Generate Translation JSON**. The system will read `lang-en.json`, translate all strings via LibreTranslate, and output `lang-[code].json`.
 
 ---
 
@@ -93,7 +136,7 @@ You can manually create a new file named `translations/lang-[code].json` (e.g., 
 
 1. Create a subdirectory inside `/plugins/` (e.g., `/plugins/my_custom_plugin/`).
 2. Create a PHP file inside it (e.g., `/plugins/my_custom_plugin/plugin.php`).
-3. Use the `add_hook()` function to listen to platform events:
+3. Attach listener callbacks using `add_hook()`:
 
 ```php
 <?php
@@ -101,33 +144,33 @@ You can manually create a new file named `translations/lang-[code].json` (e.g., 
 
 add_hook('on_ticket_created', function($data) {
     $ticket = $data['ticket'];
-    // Your custom code here (e.g., API call, SMS alert, etc.)
+    // Custom logic (API dispatch, SMS alert, etc.)
 });
 
 add_hook('on_ticket_replied', function($data) {
     $ticket = $data['ticket'];
     $reply = $data['reply'];
-    // Your custom code here
+    // Custom logic
 });
 
 ```
 
 ### Included Plugins
 
-* **Discord Notifications (`plugins/discord_notifier/discord_plugin.php`)**: Sends instant rich embeds to a Discord channel via Webhook when a new ticket is submitted or replied to. Set the `discord_webhook_url` in settings to enable it.
+* **Discord Notifications (`plugins/discord_notifier/discord_plugin.php`)**: Sends instant rich embeds to a Discord channel via Webhook when a ticket is created or replied to. Configure the `discord_webhook_url` setting to enable it.
 
 ---
 
 ## ⚙️ Pre-filled Form Links
 
-You can share external URLs or submit POST forms with pre-populated values to speed up ticket creation:
+Speed up ticket creation by sharing pre-populated form URLs:
 
 ```text
-[https://[YOUR_WEBSITE]/submit.php?name=Mario+Rossi&email=mario@myetv.tv&category=2&subject=Login+Issue&message=I+cannot+login](https://[YOUR_WEBSITE]/submit.php?name=Mario+Rossi&email=mario@myetv.tv&category=2&subject=Login+Issue&message=I+cannot+login)
+[https://your-domain.com/submit.php?name=Mario+Rossi&email=mario@domain.com&category=2&subject=Login+Issue&message=I+cannot+login](https://your-domain.com/submit.php?name=Mario+Rossi&email=mario@domain.com&category=2&subject=Login+Issue&message=I+cannot+login)
 
 ```
 
-* Supported parameters: `name`, `email`, `subject`, `category` (or `category_id`), `message` (or `msg`).
+Supported query parameters: `name`, `email`, `subject`, `category` (or `category_id`), `message` (or `msg`).
 
 ---
 
