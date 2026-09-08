@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `reset_token_expires` datetime DEFAULT NULL,
   `role` varchar(20) NOT NULL DEFAULT 'user',
   `auth_provider` varchar(20) DEFAULT 'local',
-  `auth_provider_id` varchar(100) DEFAULT NULL,
+  `auth_provider_id` varchar(255) DEFAULT NULL,
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_email` (`email`),
