@@ -4,7 +4,8 @@
 session_start();
 require_once __DIR__ . '/../includes/config.php';
 
-if (!isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'admin') {
+// Allow access to both admin and agent roles
+if (!isset($_SESSION['user_role']) || !in_array($_SESSION['user_role'], ['admin', 'agent'], true)) {
     header("Location: /login.php");
     exit;
 }
