@@ -1,6 +1,6 @@
 <?php
 // login.php
-// Unified Login page with OAuth integration for MYETV, Google, Facebook, Microsoft and 2FA verification check
+// Unified Login page with OAuth integration for MYETV, Google, Facebook, Microsoft, and 2FA verification check
 session_start();
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/turnstile.php';
@@ -80,7 +80,10 @@ $hasSso        = $myetvEnabled || $googleEnabled || $fbEnabled || $msEnabled;
                         <input type="email" name="email" class="form-control" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Password</label>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label mb-0">Password</label>
+                            <a href="/forgot_password.php" class="small text-decoration-none">Forgot Password?</a>
+                        </div>
                         <input type="password" name="password" class="form-control" required>
                     </div>
 

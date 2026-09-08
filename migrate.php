@@ -59,6 +59,11 @@ try {
     // Example:
     // if (!column_exists($pdo, 'users', 'two_factor_secret')) { ... }
 
+    //v1.0.2
+    if (!column_exists($pdo, 'users', 'reset_token')) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `reset_token` VARCHAR(64) DEFAULT NULL, ADD COLUMN `reset_token_expires` DATETIME DEFAULT NULL");
+    }
+
 } catch (Exception $e) {
     error_log("Database Migration Error: " . $e->getMessage());
 }
