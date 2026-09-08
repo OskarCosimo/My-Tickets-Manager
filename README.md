@@ -10,7 +10,7 @@
 * **Web Installation Wizard**: Easy setup via `install.php` with automatic environment checks, database creation, and admin account setup.
 * **1-Click Automatic Updates**: In-app updater that checks GitHub Releases for new code, applies incremental database migrations (`migrate.php`), and preserves existing configuration files.
 * **Two-Factor Authentication (2FA)**: TOTP-based 2FA support for local accounts and SSO logins.
-* **AI Assistance & Queue System**: Asynchronous background queue integration for AI-powered ticket summary and response assistance (supporting Ollama, OpenAI, etc.).
+* **AI Assistance & Queue System**: Asynchronous background queue integration for AI-powered ticket summary and response assistance (supporting local Ollama, API Gemini).
 * **SSO & OAuth Integration**: Single Sign-On integration for MYETV, Google, Microsoft, and Facebook accounts.
 * **Rich Text Editing**: Integrated with **My-WYSIWYG** for rich-text formatting directly on submit and reply textareas.
 * **Automated Translations (i18n)**: JSON-based internationalization featuring an automated translator tool powered by **LibreTranslate**.
