@@ -8,7 +8,7 @@
 
 * **Guest & Registered Ticket Creation**: Guests can submit tickets with just their name and email, receiving a unique tracking code and a secure access token via email.
 * **Web Installation Wizard**: Easy setup via `install.php` with automatic environment checks, database creation, and admin account setup.
-* **1-Click Automatic Updates**: In-app updater similar to WordPress that checks GitHub Releases for new code, applies incremental database migrations (`migrate.php`), and preserves existing configuration files.
+* **1-Click Automatic Updates**: In-app updater that checks GitHub Releases for new code, applies incremental database migrations (`migrate.php`), and preserves existing configuration files.
 * **Two-Factor Authentication (2FA)**: TOTP-based 2FA support for local accounts and SSO logins.
 * **AI Assistance & Queue System**: Asynchronous background queue integration for AI-powered ticket summary and response assistance (supporting Ollama, OpenAI, etc.).
 * **SSO & OAuth Integration**: Single Sign-On integration for MYETV, Google, Microsoft, and Facebook accounts.
