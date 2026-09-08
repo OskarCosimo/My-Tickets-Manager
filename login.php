@@ -8,51 +8,56 @@ require_once __DIR__ . '/includes/turnstile.php';
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $turnstileToken = $_POST['cf-turnstile-response'] ?? '';
-    if (!verify_turnstile($pdo, $turnstileToken)) {
-        $error = 'Captcha verification failed.';
+    $rateError = '';
+    if (!check_rate_limit($pdo, 'login', $rateError)) {
+        $error = $rateError;
     } else {
-        $email = trim($_POST['email'] ?? '');
-        $password = trim($_POST['password'] ?? '');
-
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
-        $stmt->execute([$email]);
-        $user = $stmt->fetch();
-
-        // Check password using password_verify or fallback to password column check
-        $passwordValid = false;
-        if ($user) {
-            if (!empty($user['password_hash'])) {
-                $passwordValid = password_verify($password, $user['password_hash']);
-            } elseif (!empty($user['password'])) {
-                $passwordValid = password_verify($password, $user['password']);
-            }
-        }
-
-        if ($user && $passwordValid) {
-            // Check if 2FA is enabled for this user account
-            if ((int)($user['two_factor_enabled'] ?? 0) === 1 && !empty($user['two_factor_secret'])) {
-                $_SESSION['2fa_pending_user'] = [
-                    'id'                 => $user['id'],
-                    'username'           => $user['username'] ?? $user['email'],
-                    'role'               => $user['role'],
-                    'email'              => $user['email'],
-                    'two_factor_secret'  => $user['two_factor_secret']
-                ];
-                header("Location: /login_2fa.php");
-                exit;
-            } else {
-                // Complete Login directly
-                $_SESSION['user_id']   = $user['id'];
-                $_SESSION['user_email']= $user['email'];
-                $_SESSION['user_role'] = $user['role'];
-                $_SESSION['username']  = $user['username'] ?? $user['email'];
-
-                header("Location: " . (in_array($user['role'], ['admin', 'agent'], true) ? "/admin/dashboard.php" : "/index.php"));
-                exit;
-            }
+        $turnstileToken = $_POST['cf-turnstile-response'] ?? '';
+        if (!verify_turnstile($pdo, $turnstileToken)) {
+            $error = 'Captcha verification failed.';
         } else {
-            $error = 'Invalid email or password.';
+            $email = trim($_POST['email'] ?? '');
+            $password = trim($_POST['password'] ?? '');
+
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
+            $stmt->execute([$email]);
+            $user = $stmt->fetch();
+
+            // Check password using password_verify or fallback to password column check
+            $passwordValid = false;
+            if ($user) {
+                if (!empty($user['password_hash'])) {
+                    $passwordValid = password_verify($password, $user['password_hash']);
+                } elseif (!empty($user['password'])) {
+                    $passwordValid = password_verify($password, $user['password']);
+                }
+            }
+
+            if ($user && $passwordValid) {
+                // Check if 2FA is enabled for this user account
+                if ((int)($user['two_factor_enabled'] ?? 0) === 1 && !empty($user['two_factor_secret'])) {
+                    $_SESSION['2fa_pending_user'] = [
+                        'id'                 => $user['id'],
+                        'username'           => $user['username'] ?? $user['email'],
+                        'role'               => $user['role'],
+                        'email'              => $user['email'],
+                        'two_factor_secret'  => $user['two_factor_secret']
+                    ];
+                    header("Location: /login_2fa.php");
+                    exit;
+                } else {
+                    // Complete Login directly
+                    $_SESSION['user_id']   = $user['id'];
+                    $_SESSION['user_email']= $user['email'];
+                    $_SESSION['user_role'] = $user['role'];
+                    $_SESSION['username']  = $user['username'] ?? $user['email'];
+
+                    header("Location: " . (in_array($user['role'], ['admin', 'agent'], true) ? "/admin/dashboard.php" : "/index.php"));
+                    exit;
+                }
+            } else {
+                $error = 'Invalid email or password.';
+            }
         }
     }
 }

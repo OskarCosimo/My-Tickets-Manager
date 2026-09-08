@@ -25,77 +25,82 @@ if (isset($_SESSION['user_email'])) {
 $categories = $pdo->query("SELECT * FROM categories ORDER BY name ASC")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ticket'])) {
-    $turnstileToken = $_POST['cf-turnstile-response'] ?? '';
-    
-    if (!verify_turnstile($pdo, $turnstileToken)) {
-        $error = 'Captcha verification failed. Please try again.';
+    $rateError = '';
+    if (!check_rate_limit($pdo, 'submit_ticket', $rateError)) {
+        $error = $rateError;
     } else {
-        $subject    = trim($_POST['subject'] ?? '');
-        $message    = trim($_POST['message'] ?? '');
-        $categoryId = !empty($_POST['category_id']) ? (int)$_POST['category_id'] : null;
-        $guestEmail = isset($_SESSION['user_id']) ? $_SESSION['user_email'] : trim($_POST['email'] ?? '');
-        $guestName  = isset($_SESSION['user_id']) ? ($_SESSION['username'] ?? '') : trim($_POST['name'] ?? '');
-
-        if (empty($subject) || empty($message)) {
-            $error = 'Please fill in all required fields.';
-        } elseif (!isset($_SESSION['user_id']) && (empty($guestEmail) || !filter_var($guestEmail, FILTER_VALIDATE_EMAIL))) {
-            $error = 'Please provide a valid email address.';
+        $turnstileToken = $_POST['cf-turnstile-response'] ?? '';
+        
+        if (!verify_turnstile($pdo, $turnstileToken)) {
+            $error = 'Captcha verification failed. Please try again.';
         } else {
-            $trackingCode = strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 3) . '-' . substr(md5(uniqid(mt_rand(), true)), 0, 3) . '-' . substr(md5(uniqid(mt_rand(), true)), 0, 3));
-            $accessToken  = bin2hex(random_bytes(32));
-            $userId       = $_SESSION['user_id'] ?? null;
+            $subject    = trim($_POST['subject'] ?? '');
+            $message    = trim($_POST['message'] ?? '');
+            $categoryId = !empty($_POST['category_id']) ? (int)$_POST['category_id'] : null;
+            $guestEmail = isset($_SESSION['user_id']) ? $_SESSION['user_email'] : trim($_POST['email'] ?? '');
+            $guestName  = isset($_SESSION['user_id']) ? ($_SESSION['username'] ?? '') : trim($_POST['name'] ?? '');
 
-            $stmt = $pdo->prepare("INSERT INTO tickets (tracking_code, access_token, user_id, category_id, guest_email, guest_name, subject, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-            if ($stmt->execute([$trackingCode, $accessToken, $userId, $categoryId, $guestEmail, $guestName, $subject, $message])) {
-                $ticketId = $pdo->lastInsertId();
-                $recipient = $guestEmail;
-                $trackingUrl = "https://" . $_SERVER['HTTP_HOST'] . "/track.php?code=" . $trackingCode . "&token=" . $accessToken . "&email=" . urlencode($recipient);
-                
-                $emailBody  = "<h3>Ticket Submitted Successfully</h3>";
-                $emailBody .= "<p>Your ticket reference code is: <strong>{$trackingCode}</strong></p>";
-                $emailBody .= "<p>You can track the progress of your ticket using the link below:</p>";
-                $emailBody .= "<p><a href='{$trackingUrl}'>{$trackingUrl}</a></p>";
-
-                send_ticket_email($pdo, $recipient, $guestName ?: 'Customer', "Ticket Received: {$trackingCode}", $emailBody);
-
-                // Add to AI Queue if AI Auto-Responder is enabled
-                if (get_setting($pdo, 'ai_enabled', '0') === '1' && get_setting($pdo, 'ai_auto_respond', '0') === '1') {
-                    $stmtQueue = $pdo->prepare("INSERT INTO ai_queue (ticket_id) VALUES (?)");
-                    $stmtQueue->execute([$ticketId]);
-
-                    // Trigger non-blocking asynchronous queue processing worker
-$workerUrl = "https://" . $_SERVER['HTTP_HOST'] . "/api/process_ai_queue.php";
-$ch = curl_init($workerUrl);
-curl_setopt($ch, CURLOPT_TIMEOUT, 1);
-curl_setopt($ch, CURLOPT_NOSIGNAL, 1);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_USERAGENT, 'InternalWorker/1.0');
-curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-curl_exec($ch);
-curl_close($ch);
-                }
-
-                // Fetch category name for plugin hook
-                $categoryName = 'General';
-                if ($categoryId) {
-                    $stmtCat = $pdo->prepare("SELECT name FROM categories WHERE id = ?");
-                    $stmtCat->execute([$categoryId]);
-                    $categoryName = $stmtCat->fetchColumn() ?: 'General';
-                }
-
-                trigger_hook('on_ticket_created', [
-                    'ticket' => [
-                        'tracking_code' => $trackingCode,
-                        'access_token'  => $accessToken,
-                        'subject'       => $subject,
-                        'guest_name'    => $guestName
-                    ],
-                    'category_name' => $categoryName
-                ]);
-
-                $success = "Ticket submitted successfully! Code: <strong>{$trackingCode}</strong>";
+            if (empty($subject) || empty($message)) {
+                $error = 'Please fill in all required fields.';
+            } elseif (!isset($_SESSION['user_id']) && (empty($guestEmail) || !filter_var($guestEmail, FILTER_VALIDATE_EMAIL))) {
+                $error = 'Please provide a valid email address.';
             } else {
-                $error = 'Failed to submit the ticket. Please try again later.';
+                $trackingCode = strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 3) . '-' . substr(md5(uniqid(mt_rand(), true)), 0, 3) . '-' . substr(md5(uniqid(mt_rand(), true)), 0, 3));
+                $accessToken  = bin2hex(random_bytes(32));
+                $userId       = $_SESSION['user_id'] ?? null;
+
+                $stmt = $pdo->prepare("INSERT INTO tickets (tracking_code, access_token, user_id, category_id, guest_email, guest_name, subject, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                if ($stmt->execute([$trackingCode, $accessToken, $userId, $categoryId, $guestEmail, $guestName, $subject, $message])) {
+                    $ticketId = $pdo->lastInsertId();
+                    $recipient = $guestEmail;
+                    $trackingUrl = "https://" . $_SERVER['HTTP_HOST'] . "/track.php?code=" . $trackingCode . "&token=" . $accessToken . "&email=" . urlencode($recipient);
+                    
+                    $emailBody  = "<h3>Ticket Submitted Successfully</h3>";
+                    $emailBody .= "<p>Your ticket reference code is: <strong>{$trackingCode}</strong></p>";
+                    $emailBody .= "<p>You can track the progress of your ticket using the link below:</p>";
+                    $emailBody .= "<p><a href='{$trackingUrl}'>{$trackingUrl}</a></p>";
+
+                    send_ticket_email($pdo, $recipient, $guestName ?: 'Customer', "Ticket Received: {$trackingCode}", $emailBody);
+
+                    // Add to AI Queue if AI Auto-Responder is enabled
+                    if (get_setting($pdo, 'ai_enabled', '0') === '1' && get_setting($pdo, 'ai_auto_respond', '0') === '1') {
+                        $stmtQueue = $pdo->prepare("INSERT INTO ai_queue (ticket_id) VALUES (?)");
+                        $stmtQueue->execute([$ticketId]);
+
+                        // Trigger non-blocking asynchronous queue processing worker
+                        $workerUrl = "https://" . $_SERVER['HTTP_HOST'] . "/api/process_ai_queue.php";
+                        $ch = curl_init($workerUrl);
+                        curl_setopt($ch, CURLOPT_TIMEOUT, 1);
+                        curl_setopt($ch, CURLOPT_NOSIGNAL, 1);
+                        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($ch, CURLOPT_USERAGENT, 'InternalWorker/1.0');
+                        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                        curl_exec($ch);
+                        curl_close($ch);
+                    }
+
+                    // Fetch category name for plugin hook
+                    $categoryName = 'General';
+                    if ($categoryId) {
+                        $stmtCat = $pdo->prepare("SELECT name FROM categories WHERE id = ?");
+                        $stmtCat->execute([$categoryId]);
+                        $categoryName = $stmtCat->fetchColumn() ?: 'General';
+                    }
+
+                    trigger_hook('on_ticket_created', [
+                        'ticket' => [
+                            'tracking_code' => $trackingCode,
+                            'access_token'  => $accessToken,
+                            'subject'       => $subject,
+                            'guest_name'    => $guestName
+                        ],
+                        'category_name' => $categoryName
+                    ]);
+
+                    $success = "Ticket submitted successfully! Code: <strong>{$trackingCode}</strong>";
+                } else {
+                    $error = 'Failed to submit the ticket. Please try again later.';
+                }
             }
         }
     }

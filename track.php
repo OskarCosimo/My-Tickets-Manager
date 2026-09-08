@@ -80,40 +80,45 @@ if (!empty($code)) {
 
     // Handle Reply Submission
     if ($ticket && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_reply'])) {
-        $turnstileToken = $_POST['cf-turnstile-response'] ?? '';
-        
-        if (!verify_turnstile($pdo, $turnstileToken)) {
-            $error = __('captcha_failed', 'Captcha verification failed.');
+        $rateError = '';
+        if (!check_rate_limit($pdo, 'reply', $rateError)) {
+            $error = $rateError;
         } else {
-            $replyMessage = trim($_POST['reply_message'] ?? '');
-
-            if (empty($replyMessage)) {
-                $error = __('message_required', 'Please enter a message before replying.');
+            $turnstileToken = $_POST['cf-turnstile-response'] ?? '';
+            
+            if (!verify_turnstile($pdo, $turnstileToken)) {
+                $error = __('captcha_failed', 'Captcha verification failed.');
             } else {
-                $userId = $_SESSION['user_id'] ?? null;
-                $senderEmail = $userId ? ($_SESSION['user_email'] ?? '') : $searchEmail;
+                $replyMessage = trim($_POST['reply_message'] ?? '');
 
-                $stmtReply = $pdo->prepare("INSERT INTO ticket_replies (ticket_id, user_id, message) VALUES (?, ?, ?)");
-                if ($stmtReply->execute([$ticket['id'], $userId, $replyMessage])) {
-                    
-                    $newStatus = $isStaff ? 'answered' : 'customer_reply';
-                    $stmtUpdate = $pdo->prepare("UPDATE tickets SET status = ? WHERE id = ?");
-                    $stmtUpdate->execute([$newStatus, $ticket['id']]);
-
-                    // Send email notifications to all participants EXCEPT the sender
-                    notify_ticket_participants($pdo, $ticket, $replyMessage, $senderEmail);
-
-                    // Trigger Plugin Hooks (e.g. Discord)
-                    trigger_hook('on_ticket_replied', [
-                        'ticket' => $ticket,
-                        'reply' => ['message' => $replyMessage],
-                        'sender_name' => $userId ? ($_SESSION['user_email'] ?? 'User') : ($ticket['guest_name'] ?: 'Customer')
-                    ]);
-
-                    $success = __('reply_sent', 'Your reply has been posted successfully!');
-                    $ticket['status'] = $newStatus;
+                if (empty($replyMessage)) {
+                    $error = __('message_required', 'Please enter a message before replying.');
                 } else {
-                    $error = __('reply_failed', 'Failed to post your reply. Please try again.');
+                    $userId = $_SESSION['user_id'] ?? null;
+                    $senderEmail = $userId ? ($_SESSION['user_email'] ?? '') : $searchEmail;
+
+                    $stmtReply = $pdo->prepare("INSERT INTO ticket_replies (ticket_id, user_id, message) VALUES (?, ?, ?)");
+                    if ($stmtReply->execute([$ticket['id'], $userId, $replyMessage])) {
+                        
+                        $newStatus = $isStaff ? 'answered' : 'customer_reply';
+                        $stmtUpdate = $pdo->prepare("UPDATE tickets SET status = ? WHERE id = ?");
+                        $stmtUpdate->execute([$newStatus, $ticket['id']]);
+
+                        // Send email notifications to all participants EXCEPT the sender
+                        notify_ticket_participants($pdo, $ticket, $replyMessage, $senderEmail);
+
+                        // Trigger Plugin Hooks (e.g. Discord)
+                        trigger_hook('on_ticket_replied', [
+                            'ticket' => $ticket,
+                            'reply' => ['message' => $replyMessage],
+                            'sender_name' => $userId ? ($_SESSION['user_email'] ?? 'User') : ($ticket['guest_name'] ?: 'Customer')
+                        ]);
+
+                        $success = __('reply_sent', 'Your reply has been posted successfully!');
+                        $ticket['status'] = $newStatus;
+                    } else {
+                        $error = __('reply_failed', 'Failed to post your reply. Please try again.');
+                    }
                 }
             }
         }

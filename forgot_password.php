@@ -12,28 +12,33 @@ $step = 'email_form'; // 'email_form' or '2fa_verify'
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // STEP 1: Process email submission
     if (isset($_POST['action']) && $_POST['action'] === 'request_reset') {
-        $email = trim($_POST['email'] ?? '');
-
-        if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $error = "Please enter a valid email address.";
+        $rateError = '';
+        if (!check_rate_limit($pdo, 'forgot', $rateError)) {
+            $error = $rateError;
         } else {
-            $stmt = $pdo->prepare("SELECT id, username, email, two_factor_secret, two_factor_enabled FROM users WHERE email = ?");
-            $stmt->execute([$email]);
-            $user = $stmt->fetch();
+            $email = trim($_POST['email'] ?? '');
 
-            if ($user) {
-                // Require 2FA verification prior to sending email if enabled
-                if (!empty($user['two_factor_enabled']) && !empty($user['two_factor_secret'])) {
-                    $_SESSION['reset_2fa_user_id'] = $user['id'];
-                    $step = '2fa_verify';
+            if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $error = "Please enter a valid email address.";
+            } else {
+                $stmt = $pdo->prepare("SELECT id, username, email, two_factor_secret, two_factor_enabled FROM users WHERE email = ?");
+                $stmt->execute([$email]);
+                $user = $stmt->fetch();
+
+                if ($user) {
+                    // Require 2FA verification prior to sending email if enabled
+                    if (!empty($user['two_factor_enabled']) && !empty($user['two_factor_secret'])) {
+                        $_SESSION['reset_2fa_user_id'] = $user['id'];
+                        $step = '2fa_verify';
+                    } else {
+                        // Send reset email immediately if 2FA is disabled
+                        sendResetEmail($pdo, $user);
+                        $message = "If an account matches that email address, a password reset link has been sent.";
+                    }
                 } else {
-                    // Send reset email immediately if 2FA is disabled
-                    sendResetEmail($pdo, $user);
+                    // Generic response to prevent user enumeration
                     $message = "If an account matches that email address, a password reset link has been sent.";
                 }
-            } else {
-                // Generic response to prevent user enumeration
-                $message = "If an account matches that email address, a password reset link has been sent.";
             }
         }
     }
