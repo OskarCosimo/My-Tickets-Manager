@@ -13,7 +13,7 @@
 * **AI Assistance & Queue System**: Asynchronous background queue integration for AI-powered ticket summary and response assistance (supporting local Ollama, API Gemini).
 * **SSO & OAuth Integration**: Single Sign-On integration for MYETV, Google, Microsoft, and Facebook accounts.
 * **Rich Text Editing**: Integrated with **My-WYSIWYG** for rich-text formatting directly on submit and reply textareas.
-* **Automated Translations (i18n)**: JSON-based internationalization featuring an automated translator tool powered by **LibreTranslate**.
+* **Automated Translations (i18n)**: JSON-based internationalization featuring an automated translator tool powered by **LibreTranslate** (optional).
 * **Event Hook Plugin Engine**: Modular architecture allowing custom extensions (e.g., Discord webhook notifications) without modifying core source files.
 * **Cloudflare Turnstile Captcha**: Built-in protection against spam and automated bots on forms.
 * **Custom SMTP Mailing**: Support for PHPMailer or native PHP `mail()` for notification dispatches.
