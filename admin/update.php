@@ -14,6 +14,11 @@ if (!isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'admin') {
 $message = '';
 $error = '';
 
+// Check if redirected after successful update
+if (isset($_GET['updated']) && $_GET['updated'] === '1') {
+    $message = "System updated successfully to the latest version!";
+}
+
 // Dynamically obtain the exact absolute path of the application root
 $appRootPath = realpath(__DIR__ . '/../');
 
@@ -29,9 +34,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['run_update'])) {
     } elseif ($updateInfo && !empty($updateInfo['has_update'])) {
         $result = apply_update($updateInfo['download_url']);
         if ($result['success']) {
-            $message = "System updated successfully to version " . htmlspecialchars($updateInfo['version']) . "!";
-            $updateInfo = check_for_updates(); // Re-check version info after update
-            $isSystemWritable = check_system_writable($appRootPath, $unwritableFiles);
+            // Post/Redirect/Get pattern to clear POST state and reload updated codebase
+            header("Location: /admin/update.php?updated=1");
+            exit;
         } else {
             $error = "Update failed: " . htmlspecialchars($result['error']);
         }
