@@ -37,12 +37,15 @@ CREATE TABLE IF NOT EXISTS `users` (
   `reset_token` varchar(64) DEFAULT NULL,
   `reset_token_expires` datetime DEFAULT NULL,
   `role` varchar(20) NOT NULL DEFAULT 'user',
+  `agency_id` int unsigned DEFAULT NULL,
   `auth_provider` varchar(20) DEFAULT 'local',
-  `auth_provider_id` varchar(255) DEFAULT NULL,
+  `auth_provider_id` varchar(100) DEFAULT NULL,
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_email` (`email`),
-  UNIQUE KEY `uk_username` (`username`)
+  UNIQUE KEY `uk_username` (`username`),
+  KEY `fk_users_agency` (`agency_id`),
+  CONSTRAINT `fk_users_agency` FOREIGN KEY (`agency_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS `rate_limits` (

@@ -72,6 +72,12 @@ if (!function_exists('index_exists')) {
 try {
     // --- INCREMENTAL DB MIGRATIONS HERE ---
 
+    // v1.0.5: Add agency_id to users table for Agency role support
+if (!column_exists($pdo, 'users', 'agency_id')) {
+    $pdo->exec("ALTER TABLE `users` ADD COLUMN `agency_id` INT UNSIGNED DEFAULT NULL");
+    $pdo->exec("ALTER TABLE `users` ADD CONSTRAINT `fk_users_agency` FOREIGN KEY (`agency_id`) REFERENCES `users` (`id`) ON DELETE SET NULL");
+}
+
     // v1.0.2: Add Password Reset Tokens
     if (!column_exists($pdo, 'users', 'reset_token')) {
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `reset_token` VARCHAR(64) DEFAULT NULL, ADD COLUMN `reset_token_expires` DATETIME DEFAULT NULL");

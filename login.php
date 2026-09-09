@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['user_role'] = $user['role'];
                     $_SESSION['username']  = $user['username'] ?? $user['email'];
 
-                    header("Location: " . (in_array($user['role'], ['admin', 'agent'], true) ? "/admin/dashboard.php" : "/index.php"));
+                    header("Location: " . (in_array($user['role'], ['admin', 'agent', 'agency'], true) ? "/admin/dashboard.php" : "/index.php"));
                     exit;
                 }
             } else {
