@@ -11,7 +11,7 @@ $turnstileEnabled = get_setting($pdo, 'turnstile_enabled', '0') === '1';
 $error = '';
 $success = '';
 
-// Pre-fill parameters support
+// Pre-fill parameters support (allows pre-populating fields via GET or POST parameters like Hesk)
 $preName     = trim($_REQUEST['name'] ?? $_REQUEST['guest_name'] ?? '');
 $preEmail    = trim($_REQUEST['email'] ?? $_REQUEST['guest_email'] ?? '');
 $preSubject  = trim($_REQUEST['subject'] ?? '');
@@ -22,9 +22,13 @@ if (isset($_SESSION['user_email'])) {
     $preEmail = $_SESSION['user_email'];
 }
 
+// Fetch active categories for dropdown
 $categories = $pdo->query("SELECT * FROM categories ORDER BY name ASC")->fetchAll();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ticket'])) {
+// Only attempt to process and create the ticket if explicitly requested via sendticket='true' or submit_ticket
+$shouldSend = ($_POST['sendticket'] ?? '') === 'true' || isset($_POST['submit_ticket']);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $shouldSend) {
     $rateError = '';
     if (!check_rate_limit($pdo, 'submit_ticket', $rateError)) {
         $error = $rateError;
@@ -119,7 +123,7 @@ require_once __DIR__ . '/includes/sidebar.php';
     <div class="container my-4" style="max-width: 750px;">
         <h2>Submit a Ticket</h2>
         <hr>
-        <?php if ($error): ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
+        <?php if ($error): ?><div class="alert alert-danger" id="submit_error_alert"><?php echo $error; ?></div><?php endif; ?>
         <?php if ($success): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
 
         <form id="ticket_form" method="POST" action="submit.php">
@@ -163,7 +167,10 @@ require_once __DIR__ . '/includes/sidebar.php';
 
             <?php if ($turnstileEnabled): ?>
                 <div class="mb-3">
-                    <div class="cf-turnstile" data-sitekey="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>"></div>
+                    <div class="cf-turnstile" 
+                         data-sitekey="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>"
+                         data-callback="onTurnstileSuccess">
+                    </div>
                 </div>
             <?php endif; ?>
 
@@ -173,6 +180,13 @@ require_once __DIR__ . '/includes/sidebar.php';
 </main>
 
 <script>
+    function onTurnstileSuccess(token) {
+        const alertBox = document.getElementById('submit_error_alert');
+        if (alertBox) {
+            alertBox.style.display = 'none';
+        }
+    }
+
     document.addEventListener("DOMContentLoaded", function() {
         if (typeof MyWysiwyg !== 'undefined' && document.getElementById('ticket_message')) {
             new MyWysiwyg('#ticket_message', {
