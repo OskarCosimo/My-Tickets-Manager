@@ -20,17 +20,22 @@ if ($agencyId > 0) {
     $agencyId = null;
 }
 
+// Check requested role (defaults to 'user', upgraded to 'agency' if requested)
+$requestedRole = trim($_GET['role'] ?? $_POST['requested_role'] ?? 'user');
+$assignedRole  = ($requestedRole === 'agency') ? 'agency' : 'user';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim($_POST['username'] ?? '');
-    $email    = trim($_POST['email'] ?? '');
-    $password = $_POST['password'] ?? '';
+    $username      = trim($_POST['username'] ?? '');
+    $email         = trim($_POST['email'] ?? '');
+    $password      = $_POST['password'] ?? '';
+    $requestedRole = trim($_POST['requested_role'] ?? 'user');
+    $assignedRole  = ($requestedRole === 'agency') ? 'agency' : 'user';
 
     if (empty($username) || empty($email) || empty($password)) {
         $error = "All fields are required.";
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = "Please enter a valid email address.";
     } else {
-        // Check if email or username is already registered
         $stmtCheck = $pdo->prepare("SELECT id FROM users WHERE email = ? OR username = ?");
         $stmtCheck->execute([$email, $username]);
         
@@ -39,10 +44,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $passwordHash = password_hash($password, PASSWORD_DEFAULT);
             
-            // Register new user assigned to the referral agency if present
-            $stmtInsert = $pdo->prepare("INSERT INTO users (username, email, password_hash, role, agency_id) VALUES (?, ?, ?, 'user', ?)");
-            if ($stmtInsert->execute([$username, $email, $passwordHash, $agencyId])) {
-                $success = "Registration completed successfully! You can now log in.";
+            // Insert user with the specified role and agency association if available
+            $stmtInsert = $pdo->prepare("INSERT INTO users (username, email, password_hash, role, agency_id) VALUES (?, ?, ?, ?, ?)");
+            if ($stmtInsert->execute([$username, $email, $passwordHash, $assignedRole, $agencyId])) {
+                $success = "Registration completed successfully! You can now log in as " . ucfirst($assignedRole) . ".";
             } else {
                 $error = "Registration failed. Please try again.";
             }
