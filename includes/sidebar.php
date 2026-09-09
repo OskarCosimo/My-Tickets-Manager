@@ -46,8 +46,8 @@ $isAdmin    = $userRole === 'admin';
                 <hr class="border-secondary my-2">
                 <div class="px-3 text-uppercase text-info-emphasis small fw-bold mb-2 sidebar-header"><?php echo __('agency_management', 'Agency Management'); ?></div>
                 
-                <a href="/admin/users.php?filter=agents" class="list-group-item list-group-item-action bg-transparent text-light border-0" title="<?php echo __('my_agents', 'My Agents'); ?>">
-                    <i class="fa-solid fa-user-tie me-2 text-info"></i><span class="link-text"><?php echo __('my_agents', 'My Agents'); ?></span>
+                <a href="/admin/agencies.php" class="list-group-item list-group-item-action bg-transparent text-light border-0" title="<?php echo __('agencies_and_agents', 'Agencies & Agents'); ?>">
+                    <i class="fa-solid fa-building-user me-2 text-info"></i><span class="link-text"><?php echo $isAdmin ? __('manage_agencies', 'Manage Agencies') : __('my_agents', 'My Agents'); ?></span>
                 </a>
             <?php endif; ?>
 
