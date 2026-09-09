@@ -35,7 +35,7 @@ if (isset($_GET['delete'])) {
 }
 
 // Fetch all categories
-$categories = $pdo->query("SELECT c.*, COUNT(t.id) as ticket_count FROM categories c LEFT JOIN tickets t ON c.id = t.category_id GROUP BY c.id ORDER BY c.name ASC")->fetchAll();
+$categories = $pdo->query("SELECT c.*, COUNT(t.id) as ticket_count FROM categories c LEFT JOIN tickets t ON c.id = t.category_id GROUP BY c.id ORDER BY c.id ASC")->fetchAll();
 
 require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/sidebar.php';
@@ -43,7 +43,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
 
 <main class="main-content">
     <div class="container-fluid">
-        <h2>Manage Ticket Categories</h2>
+        <h2><i class="fa-solid fa-folder me-2"></i> Manage Ticket Categories</h2>
         <hr>
 
         <?php if ($message): ?><div class="alert alert-success"><?php echo $message; ?></div><?php endif; ?>
@@ -76,28 +76,38 @@ require_once __DIR__ . '/../includes/sidebar.php';
                 <div class="card shadow-sm">
                     <div class="card-header bg-dark text-white">Existing Categories</div>
                     <div class="card-body p-0">
-                        <table class="table table-hover m-0">
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Description</th>
-                                    <th>Tickets Associated</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($categories as $cat): ?>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle m-0">
+                                <thead class="table-dark">
                                     <tr>
-                                        <td><strong><?php echo htmlspecialchars($cat['name']); ?></strong></td>
-                                        <td><?php echo htmlspecialchars($cat['description']); ?></td>
-                                        <td><span class="badge bg-secondary"><?php echo $cat['ticket_count']; ?></span></td>
-                                        <td>
-                                            <a href="categories.php?delete=<?php echo $cat['id']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this category?');"><i class="fa-solid fa-trash"></i></a>
-                                        </td>
+                                        <th style="width: 70px;">ID</th>
+                                        <th>Name</th>
+                                        <th>Description</th>
+                                        <th>Tickets Associated</th>
+                                        <th class="text-end">Actions</th>
                                     </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    <?php if (empty($categories)): ?>
+                                        <tr><td colspan="5" class="text-center text-muted py-3">No categories found.</td></tr>
+                                    <?php else: ?>
+                                        <?php foreach ($categories as $cat): ?>
+                                            <tr>
+                                                <td><span class="badge bg-secondary">#<?php echo (int)$cat['id']; ?></span></td>
+                                                <td><strong><?php echo htmlspecialchars($cat['name']); ?></strong></td>
+                                                <td><?php echo htmlspecialchars($cat['description']); ?></td>
+                                                <td><span class="badge bg-info text-dark"><?php echo (int)$cat['ticket_count']; ?></span></td>
+                                                <td class="text-end">
+                                                    <a href="categories.php?delete=<?php echo (int)$cat['id']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this category?');">
+                                                        <i class="fa-solid fa-trash"></i>
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
