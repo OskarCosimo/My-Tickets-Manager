@@ -48,6 +48,24 @@ require_once __DIR__ . '/../includes/sidebar.php';
         <h2 class="mb-4"><i class="fa-solid fa-chart-line me-2"></i> Dashboard</h2>
         <hr>
 
+<?php if ($_SESSION['user_role'] === 'admin'): ?>
+    <?php $agencyRegisterUrl = "https://" . $_SERVER['HTTP_HOST'] . "/register.php?role=agency"; ?>
+    <div class="card mb-4 border-primary shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <i class="fa-solid fa-building-circle-check me-2"></i> Admin Agency Registration Link
+        </div>
+        <div class="card-body">
+            <p class="mb-2">Share this invite link to allow new Agencies to register on the platform:</p>
+            <div class="input-group">
+                <input type="text" class="form-control" value="<?php echo $agencyRegisterUrl; ?>" id="adminAgencyLink" readonly>
+                <button class="btn btn-outline-primary" type="button" onclick="navigator.clipboard.writeText(document.getElementById('adminAgencyLink').value); alert('Agency registration link copied!');">
+                    <i class="fa-solid fa-copy me-1"></i> Copy Link
+                </button>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
+
         <?php if ($_SESSION['user_role'] === 'agency'): ?>
     <?php $inviteUrl = "https://" . $_SERVER['HTTP_HOST'] . "/register.php?agency=" . $_SESSION['user_id']; ?>
     <div class="card mb-4 border-primary">
