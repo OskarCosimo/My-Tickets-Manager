@@ -1,27 +1,58 @@
 <?php
 // admin/tickets.php
-// Admin tickets overview table using DataTables with deep links to track.php
+// Admin, Agency & Agent tickets overview table using DataTables
 session_start();
 require_once __DIR__ . '/../includes/config.php';
 
-// Ensure user is authorized as Admin or Agent
+// Ensure user is authorized as Admin, Agency, or Agent
 $userRole = $_SESSION['user_role'] ?? '';
-if (!in_array($userRole, ['admin', 'agent'], true)) {
+$userId   = $_SESSION['user_id'] ?? 0;
+$allowedRoles = ['admin', 'agency', 'agent'];
+
+if (!in_array($userRole, $allowedRoles, true)) {
     header("Location: /login.php");
     exit;
 }
 
 $searchQuery = trim($_GET['search'] ?? '');
 
-// Fetch all tickets with category and user information
-$stmt = $pdo->query("
-    SELECT t.*, c.name AS category_name, u.username AS user_username, a.username AS assigned_agent 
-    FROM tickets t 
-    LEFT JOIN categories c ON t.category_id = c.id 
-    LEFT JOIN users u ON t.user_id = u.id 
-    LEFT JOIN users a ON t.assigned_to = a.id 
-    ORDER BY t.created_at DESC
-");
+// Fetch tickets based on user role scope
+if ($userRole === 'admin') {
+    // Admin sees all system tickets
+    $stmt = $pdo->query("
+        SELECT t.*, c.name AS category_name, u.username AS user_username, a.username AS assigned_agent 
+        FROM tickets t 
+        LEFT JOIN categories c ON t.category_id = c.id 
+        LEFT JOIN users u ON t.user_id = u.id 
+        LEFT JOIN users a ON t.assigned_to = a.id 
+        ORDER BY t.created_at DESC
+    ");
+} elseif ($userRole === 'agency') {
+    // Agency sees tickets assigned to its agents OR submitted by its registered users
+    $stmt = $pdo->prepare("
+        SELECT t.*, c.name AS category_name, u.username AS user_username, a.username AS assigned_agent 
+        FROM tickets t 
+        LEFT JOIN categories c ON t.category_id = c.id 
+        LEFT JOIN users u ON t.user_id = u.id 
+        LEFT JOIN users a ON t.assigned_to = a.id 
+        WHERE a.agency_id = ? OR u.agency_id = ?
+        ORDER BY t.created_at DESC
+    ");
+    $stmt->execute([$userId, $userId]);
+} elseif ($userRole === 'agent') {
+    // Agent sees tickets directly assigned to them
+    $stmt = $pdo->prepare("
+        SELECT t.*, c.name AS category_name, u.username AS user_username, a.username AS assigned_agent 
+        FROM tickets t 
+        LEFT JOIN categories c ON t.category_id = c.id 
+        LEFT JOIN users u ON t.user_id = u.id 
+        LEFT JOIN users a ON t.assigned_to = a.id 
+        WHERE t.assigned_to = ?
+        ORDER BY t.created_at DESC
+    ");
+    $stmt->execute([$userId]);
+}
+
 $tickets = $stmt->fetchAll();
 
 require_once __DIR__ . '/../includes/header.php';
@@ -114,22 +145,11 @@ require_once __DIR__ . '/../includes/sidebar.php';
 
 <script>
     $(document).ready(function() {
-        var table = $('#ticketsTable').DataTable({
+        $('#ticketsTable').DataTable({
             "order": [[ 6, "desc" ]],
             "pageLength": 25,
             "search": {
                 "search": "<?php echo htmlspecialchars($searchQuery); ?>"
-            },
-            "language": {
-                "search": "Filter Tickets:",
-                "lengthMenu": "Show _MENU_ tickets per page",
-                "info": "Showing _START_ to _END_ of _TOTAL_ tickets",
-                "paginate": {
-                    "first": "First",
-                    "last": "Last",
-                    "next": "Next",
-                    "previous": "Previous"
-                }
             }
         });
     });

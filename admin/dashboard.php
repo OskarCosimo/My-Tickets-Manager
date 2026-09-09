@@ -48,6 +48,24 @@ require_once __DIR__ . '/../includes/sidebar.php';
         <h2 class="mb-4"><i class="fa-solid fa-chart-line me-2"></i> Dashboard</h2>
         <hr>
 
+        <?php if ($_SESSION['user_role'] === 'agency'): ?>
+    <?php $inviteUrl = "https://" . $_SERVER['HTTP_HOST'] . "/register.php?agency=" . $_SESSION['user_id']; ?>
+    <div class="card mb-4 border-primary">
+        <div class="card-header bg-primary text-white">
+            <i class="fa-solid fa-link me-2"></i> Your Agency Registration Link
+        </div>
+        <div class="card-body">
+            <p class="mb-2">Share this special link with your clients or agents. Anyone who registers using this link will be automatically associated with your agency:</p>
+            <div class="input-group">
+                <input type="text" class="form-control" value="<?php echo $inviteUrl; ?>" id="agencyLinkInput" readonly>
+                <button class="btn btn-outline-primary" type="button" onclick="navigator.clipboard.writeText(document.getElementById('agencyLinkInput').value); alert('Link copied!');">
+                    <i class="fa-solid fa-copy me-1"></i> Copy Link
+                </button>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
+
         <!-- Statistics Cards -->
         <div class="row g-3 mb-4">
             <div class="col-md-3">
