@@ -4,7 +4,7 @@
 session_start();
 require_once __DIR__ . '/../includes/config.php';
 
-// Ensure user is authorized as Admin (Agents/Users are strictly forbidden)
+// Ensure user is authorized as Admin (Agents/Users/Agencies are strictly forbidden)
 if (!isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'admin') {
     header("Location: /admin/dashboard.php");
     exit;
@@ -17,7 +17,7 @@ $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_role') {
     $targetUserId = (int)($_POST['user_id'] ?? 0);
     $newRole      = trim($_POST['role'] ?? '');
-    $allowedRoles = ['user', 'agent', 'admin'];
+    $allowedRoles = ['user', 'agent', 'agency', 'admin'];
 
     if ($targetUserId <= 0 || !in_array($newRole, $allowedRoles, true)) {
         $error = "Invalid user or role selection.";
@@ -62,7 +62,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
                         <thead class="table-dark">
                             <tr>
                                 <th>ID</th>
-                                <th>Username</th>
+                                <th>Username / Name</th>
                                 <th>Email</th>
                                 <th>Auth Provider</th>
                                 <th>2FA</th>
@@ -90,9 +90,10 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                     <td>
                                         <?php
                                         $badgeClass = match($u['role']) {
-                                            'admin' => 'bg-danger',
-                                            'agent' => 'bg-warning text-dark',
-                                            default => 'bg-info text-dark'
+                                            'admin'  => 'bg-danger',
+                                            'agency' => 'bg-purple text-white style="background-color: #6f42c1;"',
+                                            'agent'  => 'bg-warning text-dark',
+                                            default  => 'bg-info text-dark'
                                         };
                                         ?>
                                         <span class="badge <?php echo $badgeClass; ?>"><?php echo strtoupper($u['role']); ?></span>
@@ -105,7 +106,8 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                             <input type="hidden" name="user_id" value="<?php echo (int)$u['id']; ?>">
                                             <select name="role" class="form-select form-select-sm" style="width: auto;">
                                                 <option value="user" <?php echo $u['role'] === 'user' ? 'selected' : ''; ?>>User</option>
-                                                <option value="agent" <?php echo $u['role'] === 'agent' ? 'selected' : ''; ?>>Agent (Agency)</option>
+                                                <option value="agent" <?php echo $u['role'] === 'agent' ? 'selected' : ''; ?>>Agent</option>
+                                                <option value="agency" <?php echo $u['role'] === 'agency' ? 'selected' : ''; ?>>Agency</option>
                                                 <option value="admin" <?php echo $u['role'] === 'admin' ? 'selected' : ''; ?>>Admin</option>
                                             </select>
                                             <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Change role for this user?');">
