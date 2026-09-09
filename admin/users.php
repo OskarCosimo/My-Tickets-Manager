@@ -73,7 +73,6 @@ require_once __DIR__ . '/../includes/sidebar.php';
                     <table id="usersTable" class="table table-striped table-hover align-middle w-100">
                         <thead class="table-dark">
                             <tr>
-                                <th>ID</th>
                                 <th>Username / Name</th>
                                 <th>Email</th>
                                 <th>Role</th>
@@ -85,19 +84,18 @@ require_once __DIR__ . '/../includes/sidebar.php';
                         <tbody>
                             <?php foreach ($users as $u): ?>
                                 <tr>
-                                    <td><?php echo (int)$u['id']; ?></td>
                                     <td><strong><?php echo htmlspecialchars($u['username'] ?? 'N/A'); ?></strong></td>
                                     <td><?php echo htmlspecialchars($u['email']); ?></td>
                                     <td>
                                         <?php
-                                        $badgeClass = match($u['role']) {
-                                            'admin'  => 'bg-danger',
-                                            'agency' => 'bg-purple text-white style="background-color: #6f42c1;"',
-                                            'agent'  => 'bg-warning text-dark',
-                                            default  => 'bg-info text-dark'
+                                        $badgeStyle = match($u['role']) {
+                                            'admin'  => 'class="badge bg-danger"',
+                                            'agency' => 'class="badge bg-primary text-white"',
+                                            'agent'  => 'class="badge bg-warning text-dark"',
+                                            default  => 'class="badge bg-info text-dark"'
                                         };
                                         ?>
-                                        <span class="badge <?php echo $badgeClass; ?>"><?php echo strtoupper($u['role']); ?></span>
+                                        <span <?php echo $badgeStyle; ?>><?php echo strtoupper($u['role']); ?></span>
                                     </td>
                                     <td>
                                         <?php if ($u['agency_name']): ?>
@@ -153,7 +151,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
 <script>
     $(document).ready(function() {
         $('#usersTable').DataTable({
-            "order": [[ 0, "desc" ]],
+            "order": [[ 4, "desc" ]],
             "pageLength": 10,
             "language": {
                 "search": "Filter users:"
