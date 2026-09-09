@@ -1,17 +1,31 @@
 <?php
 // includes/header.php
-// Header with responsive layout CSS, Turnstile JS API, and language selector integration
+// Header with Bootstrap 5.3 Theme Switcher, responsive CSS, Turnstile JS API, and language selector
 require_once __DIR__ . '/config.php';
 $siteTitle = get_setting($pdo, 'site_title', 'My Tickets Manager');
 $availableLangs = get_available_languages();
 global $currentLang;
 ?>
 <!DOCTYPE html>
-<html lang="<?php echo htmlspecialchars($currentLang); ?>">
+<html lang="<?php echo htmlspecialchars($currentLang); ?>" data-bs-theme="auto">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($siteTitle); ?></title>
+    
+    <!-- Early theme initialization to avoid page flash -->
+    <script>
+        (function() {
+            const storedTheme = localStorage.getItem('theme') || 'auto';
+            if (storedTheme === 'auto') {
+                const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                document.documentElement.setAttribute('data-bs-theme', systemDark ? 'dark' : 'light');
+            } else {
+                document.documentElement.setAttribute('data-bs-theme', storedTheme);
+            }
+        })();
+    </script>
+
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
     
@@ -26,7 +40,7 @@ global $currentLang;
         .wrapper { display: flex; flex: 1; align-items: stretch; width: 100%; }
         .main-content { flex: 1; padding: 20px; min-width: 0; }
 
-        /* Dynamic Sidebar Styling */
+        /* Dynamic Sidebar Styling with Enhanced Contrast */
         #sidebar-wrapper {
             width: 240px;
             transition: width 0.3s ease;
@@ -39,6 +53,12 @@ global $currentLang;
             display: flex;
             align-items: center;
             padding: 0.75rem 1.25rem;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+
+        #sidebar-wrapper .list-group-item:hover {
+            background-color: rgba(255, 255, 255, 0.1) !important;
+            color: #ffffff !important;
         }
 
         #sidebar-wrapper .list-group-item i {
@@ -47,13 +67,18 @@ global $currentLang;
             font-size: 1.1rem;
         }
 
+        #sidebar-wrapper .sidebar-header {
+            color: #0dcaf0 !important; /* Cyan highlight for high readability */
+            letter-spacing: 0.5px;
+        }
+
         /* Collapsed Sidebar State */
         body.sidebar-collapsed #sidebar-wrapper {
             width: 65px;
         }
 
         body.sidebar-collapsed #sidebar-wrapper .link-text,
-        body.sidebar-collapsed #sidebar-wrapper .admin-header {
+        body.sidebar-collapsed #sidebar-wrapper .sidebar-header {
             display: none !important;
         }
 
@@ -63,14 +88,14 @@ global $currentLang;
                 width: 65px;
             }
             #sidebar-wrapper .link-text,
-            #sidebar-wrapper .admin-header {
+            #sidebar-wrapper .sidebar-header {
                 display: none !important;
             }
             body.sidebar-expanded #sidebar-wrapper {
                 width: 240px;
             }
             body.sidebar-expanded #sidebar-wrapper .link-text,
-            body.sidebar-expanded #sidebar-wrapper .admin-header {
+            body.sidebar-expanded #sidebar-wrapper .sidebar-header {
                 display: inline-block !important;
             }
         }
@@ -87,6 +112,32 @@ global $currentLang;
             <a class="navbar-brand me-0 px-2 fs-6" href="/"><?php echo htmlspecialchars($siteTitle); ?></a>
             
             <div class="d-flex align-items-center ms-auto gap-3">
+                
+                <!-- Bootstrap 5 Theme Switcher Dropdown -->
+                <div class="dropdown">
+                    <button class="btn btn-dark btn-sm dropdown-toggle border-secondary" type="button" id="themeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fa-solid fa-circle-half-stroke me-1" id="themeIcon"></i>
+                        <span id="themeLabel">Auto</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="themeDropdown">
+                        <li>
+                            <button class="dropdown-item d-flex align-items-center" type="button" data-bs-theme-value="light">
+                                <i class="fa-solid fa-sun me-2 text-warning"></i> Light
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item d-flex align-items-center" type="button" data-bs-theme-value="dark">
+                                <i class="fa-solid fa-moon me-2 text-primary"></i> Dark
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item d-flex align-items-center" type="button" data-bs-theme-value="auto">
+                                <i class="fa-solid fa-circle-half-stroke me-2 text-secondary"></i> System Auto
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+
                 <!-- Language Selector Dropdown -->
                 <form method="GET" class="m-0">
                     <select name="lang" class="form-select form-select-sm bg-dark text-white border-secondary" onchange="this.form.submit()">
