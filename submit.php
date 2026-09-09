@@ -190,7 +190,8 @@ require_once __DIR__ . '/includes/sidebar.php';
     document.addEventListener("DOMContentLoaded", function() {
         if (typeof MyWysiwyg !== 'undefined' && document.getElementById('ticket_message')) {
             new MyWysiwyg('#ticket_message', {
-                lang: '<?php echo htmlspecialchars($currentLang ?? "en"); ?>'
+                lang: '<?php echo htmlspecialchars($currentLang ?? "en"); ?>',
+                maxChars: 10000
             });
         }
     });

@@ -264,7 +264,8 @@ require_once __DIR__ . '/includes/sidebar.php';
 
         if (typeof MyWysiwyg !== 'undefined' && document.getElementById('reply_message')) {
             editorInstance = new MyWysiwyg('#reply_message', {
-                lang: '<?php echo htmlspecialchars($currentLang ?? "en"); ?>'
+                lang: '<?php echo htmlspecialchars($currentLang ?? "en"); ?>',
+                maxChars: 5000
             });
         }
 
