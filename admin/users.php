@@ -1,6 +1,6 @@
 <?php
 // admin/users.php
-// User Management Page with DataTables, Agency Assignment, Auto-Assign Control, and Ban System
+// User Management Page with Compact Table View, Dedicated Settings Modal, and Ban Control
 session_start();
 require_once __DIR__ . '/../includes/config.php';
 
@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 // Process Role, Agency & Auto-Assign Update Request
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_role') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_user_settings') {
     $targetUserId = (int)($_POST['user_id'] ?? 0);
     $newRole      = trim($_POST['role'] ?? '');
     // If new role is 'agency' or 'admin', agency_id must be NULL
@@ -127,11 +127,11 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                     </td>
                                     <td>
                                         <?php if ($u['role'] === 'agency'): ?>
-                                            <span class="text-muted small"><em>N/A (Is Agency)</em></span>
+                                            <span class="text-muted small"><em>N/A (Agency)</em></span>
                                         <?php elseif ($u['agency_name']): ?>
                                             <span class="badge bg-secondary"><i class="fa-solid fa-building me-1"></i> <?php echo htmlspecialchars($u['agency_name']); ?></span>
                                         <?php else: ?>
-                                            <span class="text-muted small">Independent / None</span>
+                                            <span class="text-muted small">None</span>
                                         <?php endif; ?>
                                     </td>
                                     <td>
@@ -143,54 +143,90 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                     </td>
                                     <td><small><?php echo htmlspecialchars(date('Y-m-d', strtotime($u['created_at']))); ?></small></td>
                                     <td class="text-end">
-                                        <div class="d-inline-flex align-items-center gap-2">
-                                            <!-- Role & Agency & Auto-Assign Form -->
-                                            <form method="POST" action="users.php" class="d-inline-flex align-items-center gap-2 m-0">
-                                                <input type="hidden" name="action" value="update_role">
-                                                <input type="hidden" name="user_id" value="<?php echo (int)$u['id']; ?>">
-                                                
-                                                <!-- Select Role -->
-                                                <select name="role" class="form-select form-select-sm role-select" style="width: auto;" data-user-id="<?php echo (int)$u['id']; ?>">
-                                                    <option value="user" <?php echo $u['role'] === 'user' ? 'selected' : ''; ?>>User</option>
-                                                    <option value="agent" <?php echo $u['role'] === 'agent' ? 'selected' : ''; ?>>Agent</option>
-                                                    <option value="agency" <?php echo $u['role'] === 'agency' ? 'selected' : ''; ?>>Agency</option>
-                                                    <option value="admin" <?php echo $u['role'] === 'admin' ? 'selected' : ''; ?>>Admin</option>
-                                                </select>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <!-- Dedicated User Settings Modal Trigger Button -->
+                                            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#userModal<?php echo (int)$u['id']; ?>" title="Configure User Settings">
+                                                <i class="fa-solid fa-user-gear me-1"></i> Edit
+                                            </button>
 
-                                                <!-- Select Agency (Hidden/Disabled if Role is Agency or Admin) -->
-                                                <select name="agency_id" id="agency_select_<?php echo (int)$u['id']; ?>" class="form-select form-select-sm agency-select" style="width: auto; <?php echo in_array($u['role'], ['agency', 'admin'], true) ? 'display: none;' : ''; ?>">
-                                                    <option value="">-- No Agency --</option>
-                                                    <?php foreach ($agenciesList as $ag): ?>
-                                                        <!-- Prevent agency from selecting itself -->
-                                                        <?php if ((int)$ag['id'] !== (int)$u['id']): ?>
-                                                            <option value="<?php echo $ag['id']; ?>" <?php echo (int)$u['agency_id'] === (int)$ag['id'] ? 'selected' : ''; ?>>
-                                                                <?php echo htmlspecialchars($ag['username']); ?>
-                                                            </option>
-                                                        <?php endif; ?>
-                                                    <?php endforeach; ?>
-                                                </select>
-
-                                                <!-- Toggle Auto-Assign -->
-                                                <div class="form-check form-switch m-0" title="Toggle Auto-Assign">
-                                                    <input class="form-check-input" type="checkbox" name="auto_assign_tickets" value="1" <?php echo !empty($u['auto_assign_tickets']) ? 'checked' : ''; ?>>
-                                                </div>
-
-                                                <button type="submit" class="btn btn-primary btn-sm" title="Save Changes" onclick="return confirm('Update settings for this user?');">
-                                                    <i class="fa-solid fa-floppy-disk"></i>
-                                                </button>
-                                            </form>
-
-                                            <!-- Ban / Unban Form Button -->
+                                            <!-- Ban / Unban Button -->
                                             <?php if ((int)$u['id'] !== (int)$_SESSION['user_id']): ?>
-                                                <form method="POST" action="users.php" class="m-0">
+                                                <form method="POST" action="users.php" class="d-inline m-0">
                                                     <input type="hidden" name="action" value="toggle_ban">
                                                     <input type="hidden" name="user_id" value="<?php echo (int)$u['id']; ?>">
-                                                    <button type="submit" class="btn btn-sm <?php echo !empty($u['is_banned']) ? 'btn-success' : 'btn-danger'; ?>" title="<?php echo !empty($u['is_banned']) ? 'Unban User' : 'Ban User'; ?>" onclick="return confirm('Are you sure you want to change the ban status for this user?');">
+                                                    <button type="submit" class="btn btn-sm <?php echo !empty($u['is_banned']) ? 'btn-success' : 'btn-outline-danger'; ?>" title="<?php echo !empty($u['is_banned']) ? 'Unban User' : 'Ban User'; ?>" onclick="return confirm('Change ban status for this user?');">
                                                         <i class="fa-solid <?php echo !empty($u['is_banned']) ? 'fa-user-check' : 'fa-user-slash'; ?>"></i>
                                                     </button>
                                                 </form>
                                             <?php endif; ?>
                                         </div>
+
+                                        <!-- User Settings Modal -->
+                                        <div class="modal fade text-start" id="userModal<?php echo (int)$u['id']; ?>" tabindex="-1" aria-hidden="true">
+                                            <div class="modal-dialog modal-dialog-centered">
+                                                <div class="modal-content">
+                                                    <form method="POST" action="users.php">
+                                                        <input type="hidden" name="action" value="update_user_settings">
+                                                        <input type="hidden" name="user_id" value="<?php echo (int)$u['id']; ?>">
+
+                                                        <div class="modal-header bg-dark text-white">
+                                                            <h5 class="modal-title">
+                                                                <i class="fa-solid fa-user-gear me-2"></i> Settings for <?php echo htmlspecialchars($u['username'] ?? 'User'); ?>
+                                                            </h5>
+                                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                        </div>
+
+                                                        <div class="modal-body">
+                                                            <!-- Role Selection -->
+                                                            <div class="mb-3">
+                                                                <label class="form-label fw-bold">User System Role</label>
+                                                                <select name="role" class="form-select role-select" data-user-id="<?php echo (int)$u['id']; ?>">
+                                                                    <option value="user" <?php echo $u['role'] === 'user' ? 'selected' : ''; ?>>User (Client)</option>
+                                                                    <option value="agent" <?php echo $u['role'] === 'agent' ? 'selected' : ''; ?>>Agent (Support Staff)</option>
+                                                                    <option value="agency" <?php echo $u['role'] === 'agency' ? 'selected' : ''; ?>>Agency (Agency Manager)</option>
+                                                                    <option value="admin" <?php echo $u['role'] === 'admin' ? 'selected' : ''; ?>>Admin (Full System Control)</option>
+                                                                </select>
+                                                            </div>
+
+                                                            <!-- Agency Assignment -->
+                                                            <div class="mb-3 agency-group" id="agency_group_<?php echo (int)$u['id']; ?>" style="<?php echo in_array($u['role'], ['agency', 'admin'], true) ? 'display: none;' : ''; ?>">
+                                                                <label class="form-label fw-bold">Assigned Agency</label>
+                                                                <select name="agency_id" class="form-select">
+                                                                    <option value="">-- Independent / No Agency --</option>
+                                                                    <?php foreach ($agenciesList as $ag): ?>
+                                                                        <?php if ((int)$ag['id'] !== (int)$u['id']): ?>
+                                                                            <option value="<?php echo $ag['id']; ?>" <?php echo (int)$u['agency_id'] === (int)$ag['id'] ? 'selected' : ''; ?>>
+                                                                                <?php echo htmlspecialchars($ag['username']); ?>
+                                                                            </option>
+                                                                        <?php endif; ?>
+                                                                    <?php endforeach; ?>
+                                                                </select>
+                                                                <div class="form-text">Associates this staff member/user with a specific managing agency.</div>
+                                                            </div>
+
+                                                            <!-- Auto-Assignment Switch -->
+                                                            <div class="border rounded p-3 bg-light mb-2">
+                                                                <div class="form-check form-switch m-0">
+                                                                    <input class="form-check-input" type="checkbox" name="auto_assign_tickets" value="1" id="autoAssignModal<?php echo (int)$u['id']; ?>" <?php echo !empty($u['auto_assign_tickets']) ? 'checked' : ''; ?>>
+                                                                    <label class="form-check-label fw-bold ms-2" for="autoAssignModal<?php echo (int)$u['id']; ?>">
+                                                                        Automatic Ticket Assignment
+                                                                    </label>
+                                                                </div>
+                                                                <p class="text-muted small mt-2 mb-0">
+                                                                    When enabled, new incoming support tickets will be automatically routed and assigned to this account upon submission.
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="modal-footer py-2">
+                                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                                                            <button type="submit" class="btn btn-primary btn-sm"><i class="fa-solid fa-floppy-disk me-1"></i> Save Changes</button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -216,16 +252,17 @@ require_once __DIR__ . '/../includes/sidebar.php';
             }
         });
 
-        // Toggle visibility of the Agency select dropdown based on role selection
+        // Dynamic toggle for Agency Selection container inside Modal
         $('.role-select').on('change', function() {
             const userId = $(this).data('user-id');
             const selectedRole = $(this).val();
-            const agencySelect = $('#agency_select_' + userId);
+            const agencyGroup = $('#agency_group_' + userId);
 
             if (selectedRole === 'agency' || selectedRole === 'admin') {
-                agencySelect.val('').hide();
+                agencyGroup.find('select').val('');
+                agencyGroup.hide();
             } else {
-                agencySelect.show();
+                agencyGroup.show();
             }
         });
     });
