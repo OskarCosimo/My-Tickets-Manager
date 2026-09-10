@@ -72,6 +72,41 @@ if (!function_exists('index_exists')) {
 try {
     // --- INCREMENTAL DB MIGRATIONS HERE ---
 
+    // v1.0.19: Create Notifications Table for Internal Platform Alerts
+if (!table_exists($pdo, 'notifications')) {
+    $pdo->exec("
+        CREATE TABLE `notifications` (
+          `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+          `user_id` INT UNSIGNED NOT NULL,
+          `ticket_id` INT UNSIGNED NOT NULL,
+          `title` VARCHAR(255) NOT NULL,
+          `message` TEXT NOT NULL,
+          `is_read` TINYINT(1) NOT NULL DEFAULT '0',
+          `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`),
+          KEY `idx_notif_user_read` (`user_id`, `is_read`),
+          CONSTRAINT `fk_notif_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+          CONSTRAINT `fk_notif_ticket` FOREIGN KEY (`ticket_id`) REFERENCES `tickets` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+}
+
+// v1.0.19: Create Ticket Followers Table (Agent Follow/Unfollow system)
+if (!table_exists($pdo, 'ticket_followers')) {
+    $pdo->exec("
+        CREATE TABLE `ticket_followers` (
+          `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+          `ticket_id` INT UNSIGNED NOT NULL,
+          `user_id` INT UNSIGNED NOT NULL,
+          `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`),
+          UNIQUE KEY `uk_ticket_follower` (`ticket_id`, `user_id`),
+          CONSTRAINT `fk_tf_ticket` FOREIGN KEY (`ticket_id`) REFERENCES `tickets` (`id`) ON DELETE CASCADE,
+          CONSTRAINT `fk_tf_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+}
+
     // v1.0.17: Add is_banned column to users table
     if (!column_exists($pdo, 'users', 'is_banned')) {
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `is_banned` TINYINT(1) NOT NULL DEFAULT '0' AFTER `two_factor_enabled`");

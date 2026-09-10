@@ -1,10 +1,11 @@
 <?php
 // submit.php
-// Ticket submission page with Category selection, Pre-filled form support, My-WYSIWYG editor, and Auto-Assignment engine
+// Ticket submission page with Category selection, Pre-filled form support, My-WYSIWYG editor, Auto-Assignment engine, and Internal Notifications
 session_start();
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/turnstile.php';
 require_once __DIR__ . '/includes/mailer.php';
+require_once __DIR__ . '/includes/notifications_helper.php';
 
 $allowGuests = get_setting($pdo, 'allow_guest_tickets', '1') === '1';
 $turnstileEnabled = get_setting($pdo, 'turnstile_enabled', '0') === '1';
@@ -71,6 +72,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $shouldSend) {
                         $stmtUpdateTicket = $pdo->prepare("UPDATE tickets SET assigned_to = ? WHERE id = ?");
                         $stmtUpdateTicket->execute([$autoAssignUser['id'], $ticketId]);
                     }
+
+                    // --- DISPATCH INTERNAL PLATFORM NOTIFICATIONS ---
+                    $createdTicket = ['id' => $ticketId, 'assigned_to' => $autoAssignUser['id'] ?? null];
+                    notify_ticket_followers(
+                        $pdo, 
+                        $createdTicket, 
+                        "New Ticket Created #" . $trackingCode, 
+                        "Subject: " . $subject, 
+                        $userId
+                    );
 
                     $recipient = $guestEmail;
                     $trackingUrl = "https://" . $_SERVER['HTTP_HOST'] . "/track.php?code=" . $trackingCode . "&token=" . $accessToken . "&email=" . urlencode($recipient);

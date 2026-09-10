@@ -1,22 +1,24 @@
 <?php
 // track.php
-// Public tracking page with Email verification, Reply capability, Staff status actions, and My-WYSIWYG editor integration
+// Public tracking page with Email verification, Reply capability, Staff status actions, Follow/Unfollow, and Internal Notifications
 session_start();
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/turnstile.php';
 require_once __DIR__ . '/includes/mailer.php';
+require_once __DIR__ . '/includes/notifications_helper.php';
 
 $code        = trim($_REQUEST['code'] ?? '');
 $token       = trim($_REQUEST['token'] ?? '');
 $searchEmail = trim($_REQUEST['email'] ?? ($_SESSION['user_email'] ?? ''));
 
 $userRole = $_SESSION['user_role'] ?? '';
-$isStaff  = in_array($userRole, ['admin', 'agent'], true);
+$isStaff  = in_array($userRole, ['admin', 'agency', 'agent'], true);
 
-$ticket  = null;
-$replies = [];
-$error   = '';
-$success = '';
+$ticket      = null;
+$replies     = [];
+$error       = '';
+$success     = '';
+$isFollowing = false;
 
 if (!empty($code)) {
     if (!$isStaff && empty($searchEmail)) {
@@ -60,6 +62,32 @@ if (!empty($code)) {
         if (!$ticket) {
             $error = __('ticket_not_found', 'No ticket found matching the specified criteria.');
         }
+    }
+
+    // Staff Toggle Follow/Unfollow Ticket Action
+    if ($ticket && $isStaff && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_follow'])) {
+        $staffUserId = (int)$_SESSION['user_id'];
+        $stmtCheckFollow = $pdo->prepare("SELECT id FROM ticket_followers WHERE ticket_id = ? AND user_id = ?");
+        $stmtCheckFollow->execute([$ticket['id'], $staffUserId]);
+        
+        if ($stmtCheckFollow->fetch()) {
+            $stmtUnfollow = $pdo->prepare("DELETE FROM ticket_followers WHERE ticket_id = ? AND user_id = ?");
+            $stmtUnfollow->execute([$ticket['id'], $staffUserId]);
+            $success = "You have stopped following this ticket.";
+            $isFollowing = false;
+        } else {
+            $stmtFollow = $pdo->prepare("INSERT INTO ticket_followers (ticket_id, user_id) VALUES (?, ?)");
+            $stmtFollow->execute([$ticket['id'], $staffUserId]);
+            $success = "You are now following this ticket. You will receive internal notifications for all updates.";
+            $isFollowing = true;
+        }
+    }
+
+    // Check if current logged staff user is following this ticket
+    if ($ticket && $isStaff && !isset($_POST['toggle_follow'])) {
+        $stmtIsFollow = $pdo->prepare("SELECT id FROM ticket_followers WHERE ticket_id = ? AND user_id = ?");
+        $stmtIsFollow->execute([$ticket['id'], $_SESSION['user_id']]);
+        $isFollowing = (bool)$stmtIsFollow->fetch();
     }
 
     // Staff Manual Status Update
@@ -106,6 +134,11 @@ if (!empty($code)) {
 
                         // Send email notifications to all participants EXCEPT the sender
                         notify_ticket_participants($pdo, $ticket, $replyMessage, $senderEmail);
+
+                        // Dispatch internal platform notification to followers and assignees
+                        $notifTitle = "New reply on ticket #" . $ticket['tracking_code'];
+                        $notifMsg   = "Reply posted by " . ($userId ? ($_SESSION['username'] ?? 'Staff') : ($ticket['guest_name'] ?: 'Customer'));
+                        notify_ticket_followers($pdo, $ticket, $notifTitle, $notifMsg, $userId);
 
                         // Trigger Plugin Hooks (e.g. Discord)
                         trigger_hook('on_ticket_replied', [
@@ -184,22 +217,33 @@ require_once __DIR__ . '/includes/sidebar.php';
                 </div>
                 <div class="card-body">
                     <div class="ticket-description mb-3"><?php echo $ticket['message']; ?></div>
-                    <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <small class="text-muted">Submitted on: <?php echo $ticket['created_at']; ?> | Category: <strong><?php echo htmlspecialchars($ticket['category_name'] ?? 'General'); ?></strong></small>
 
-                        <?php if ($isStaff): ?>
-                            <!-- Staff Quick Status Change Control -->
-                            <form method="POST" action="track.php?code=<?php echo urlencode($code); ?>&token=<?php echo urlencode($token); ?>&email=<?php echo urlencode($searchEmail); ?>" class="d-flex align-items-center gap-2">
-                                <input type="hidden" name="update_status" value="1">
-                                <select name="status" class="form-select form-select-sm" style="width: auto;">
-                                    <option value="open" <?php echo $ticket['status'] === 'open' ? 'selected' : ''; ?>>Open</option>
-                                    <option value="answered" <?php echo $ticket['status'] === 'answered' ? 'selected' : ''; ?>>Answered</option>
-                                    <option value="customer_reply" <?php echo $ticket['status'] === 'customer_reply' ? 'selected' : ''; ?>>Customer Reply</option>
-                                    <option value="closed" <?php echo $ticket['status'] === 'closed' ? 'selected' : ''; ?>>Closed</option>
-                                </select>
-                                <button type="submit" class="btn btn-sm btn-outline-secondary">Update Status</button>
-                            </form>
-                        <?php endif; ?>
+                        <div class="d-flex align-items-center gap-2">
+                            <?php if ($isStaff): ?>
+                                <!-- Follow / Unfollow Ticket Button for Staff -->
+                                <form method="POST" action="track.php?code=<?php echo urlencode($code); ?>&token=<?php echo urlencode($token); ?>&email=<?php echo urlencode($searchEmail); ?>" class="d-inline">
+                                    <input type="hidden" name="toggle_follow" value="1">
+                                    <button type="submit" class="btn btn-sm <?php echo $isFollowing ? 'btn-warning' : 'btn-outline-warning'; ?>">
+                                        <i class="fa-solid <?php echo $isFollowing ? 'fa-star' : 'fa-star-half-stroke'; ?> me-1"></i>
+                                        <?php echo $isFollowing ? 'Following Ticket' : 'Follow Ticket'; ?>
+                                    </button>
+                                </form>
+
+                                <!-- Staff Quick Status Change Control -->
+                                <form method="POST" action="track.php?code=<?php echo urlencode($code); ?>&token=<?php echo urlencode($token); ?>&email=<?php echo urlencode($searchEmail); ?>" class="d-flex align-items-center gap-2">
+                                    <input type="hidden" name="update_status" value="1">
+                                    <select name="status" class="form-select form-select-sm" style="width: auto;">
+                                        <option value="open" <?php echo $ticket['status'] === 'open' ? 'selected' : ''; ?>>Open</option>
+                                        <option value="answered" <?php echo $ticket['status'] === 'answered' ? 'selected' : ''; ?>>Answered</option>
+                                        <option value="customer_reply" <?php echo $ticket['status'] === 'customer_reply' ? 'selected' : ''; ?>>Customer Reply</option>
+                                        <option value="closed" <?php echo $ticket['status'] === 'closed' ? 'selected' : ''; ?>>Closed</option>
+                                    </select>
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary">Update Status</button>
+                                </form>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </div>
             </div>
