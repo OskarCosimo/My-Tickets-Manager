@@ -1,6 +1,6 @@
 <?php
 // admin/tickets.php
-// Admin, Agency & Agent tickets overview table using DataTables with Dynamic Reassignment
+// Admin, Agency & Agent tickets overview table with Modal Assignee & Follower Management
 session_start();
 require_once __DIR__ . '/../includes/config.php';
 
@@ -17,64 +17,109 @@ if (!in_array($userRole, $allowedRoles, true)) {
 $message = '';
 $error   = '';
 
-// --- PROCESS TICKET REASSIGNMENT REQUEST ---
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'assign_ticket') {
+// --- PROCESS ADD ASSIGNEE / FOLLOWER ACTION ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_follower') {
     $ticketId = (int)($_POST['ticket_id'] ?? 0);
-    $assignTo = !empty($_POST['assigned_to']) ? (int)$_POST['assigned_to'] : null;
+    $targetStaffId = (int)($_POST['staff_id'] ?? 0);
 
-    if ($ticketId > 0) {
+    if ($ticketId > 0 && $targetStaffId > 0) {
+        $canManage = false;
         if ($userRole === 'admin') {
-            // Admin can reassign any ticket to any Agency or Agent
-            $stmtAssign = $pdo->prepare("UPDATE tickets SET assigned_to = ? WHERE id = ?");
-            $stmtAssign->execute([$assignTo, $ticketId]);
-            $message = "Ticket assignment updated successfully.";
+            $canManage = true;
         } elseif ($userRole === 'agency') {
-            // Agency can assign unassigned tickets OR tickets assigned to itself/its agents
-            $stmtCheck = $pdo->prepare("
-                SELECT id FROM tickets 
-                WHERE id = ? AND (assigned_to IS NULL OR assigned_to = ? OR assigned_to IN (SELECT id FROM users WHERE agency_id = ?))
-            ");
-            $stmtCheck->execute([$ticketId, $userId, $userId]);
-
+            // Agency can only assign itself or its own agents
+            $stmtCheck = $pdo->prepare("SELECT id FROM users WHERE id = ? AND (agency_id = ? OR id = ?) AND is_banned = 0");
+            $stmtCheck->execute([$targetStaffId, $userId, $userId]);
             if ($stmtCheck->fetch()) {
-                // Verify that the selected assignee is either the agency itself or one of its agents
-                if ($assignTo !== null) {
-                    $stmtAgentCheck = $pdo->prepare("SELECT id FROM users WHERE id = ? AND (agency_id = ? OR id = ?) AND role IN ('agent', 'agency')");
-                    $stmtAgentCheck->execute([$assignTo, $userId, $userId]);
-                    if (!$stmtAgentCheck->fetch()) {
-                        $assignTo = null;
-                    }
-                }
-
-                $stmtAssign = $pdo->prepare("UPDATE tickets SET assigned_to = ? WHERE id = ?");
-                $stmtAssign->execute([$assignTo, $ticketId]);
-                $message = "Ticket assigned to agent successfully.";
-            } else {
-                $error = "You do not have permission to reassign this ticket.";
+                $canManage = true;
             }
+        } elseif ($userRole === 'agent' && $targetStaffId === $userId) {
+            $canManage = true;
+        }
+
+        if ($canManage) {
+            // Update assigned_to if main ticket is unassigned
+            $stmtMain = $pdo->prepare("SELECT assigned_to FROM tickets WHERE id = ?");
+            $stmtMain->execute([$ticketId]);
+            $currentAssigned = $stmtMain->fetchColumn();
+
+            if (empty($currentAssigned)) {
+                $stmtSet = $pdo->prepare("UPDATE tickets SET assigned_to = ? WHERE id = ?");
+                $stmtSet->execute([$targetStaffId, $ticketId]);
+            }
+
+            // Add to ticket_followers table
+            $stmtFollow = $pdo->prepare("INSERT IGNORE INTO ticket_followers (ticket_id, user_id) VALUES (?, ?)");
+            $stmtFollow->execute([$ticketId, $targetStaffId]);
+            $message = "Staff member successfully added to ticket followers.";
+        } else {
+            $error = "Permission denied: You cannot assign this staff member.";
+        }
+    }
+}
+
+// --- PROCESS REMOVE ASSIGNEE / FOLLOWER ACTION ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'remove_follower') {
+    $ticketId = (int)($_POST['ticket_id'] ?? 0);
+    $targetStaffId = (int)($_POST['staff_id'] ?? 0);
+
+    if ($ticketId > 0 && $targetStaffId > 0) {
+        $canManage = false;
+        if ($userRole === 'admin') {
+            $canManage = true;
+        } elseif ($userRole === 'agency') {
+            $stmtCheck = $pdo->prepare("SELECT id FROM users WHERE id = ? AND (agency_id = ? OR id = ?)");
+            $stmtCheck->execute([$targetStaffId, $userId, $userId]);
+            if ($stmtCheck->fetch()) {
+                $canManage = true;
+            }
+        } elseif ($userRole === 'agent' && $targetStaffId === $userId) {
+            $canManage = true;
+        }
+
+        if ($canManage) {
+            // Delete from ticket_followers
+            $stmtDel = $pdo->prepare("DELETE FROM ticket_followers WHERE ticket_id = ? AND user_id = ?");
+            $stmtDel->execute([$ticketId, $targetStaffId]);
+
+            // If main assignee is removed, unassign or pick another follower
+            $stmtMain = $pdo->prepare("SELECT assigned_to FROM tickets WHERE id = ?");
+            $stmtMain->execute([$ticketId]);
+            if ((int)$stmtMain->fetchColumn() === $targetStaffId) {
+                $stmtNext = $pdo->prepare("SELECT user_id FROM ticket_followers WHERE ticket_id = ? LIMIT 1");
+                $stmtNext->execute([$ticketId]);
+                $nextStaff = $stmtNext->fetchColumn() ?: null;
+
+                $stmtUpdateMain = $pdo->prepare("UPDATE tickets SET assigned_to = ? WHERE id = ?");
+                $stmtUpdateMain->execute([$nextStaff, $ticketId]);
+            }
+            $message = "Staff member removed from ticket.";
+        } else {
+            $error = "Permission denied: You cannot remove this staff member.";
         }
     }
 }
 
 $searchQuery = trim($_GET['search'] ?? '');
 
-// --- FETCH SELECTABLE STAFF USERS FOR ASSIGNMENT DROPDOWN ---
+// --- FETCH SELECTABLE STAFF USERS BASED ON ROLE SCOPE ---
 $assignableStaff = [];
 if ($userRole === 'admin') {
-    // Admin can assign to any Agency or Agent
-    $assignableStaff = $pdo->query("SELECT id, username, role FROM users WHERE role IN ('agency', 'agent') AND is_banned = 0 ORDER BY role ASC, username ASC")->fetchAll();
+    $assignableStaff = $pdo->query("SELECT id, username, role FROM users WHERE role IN ('admin', 'agency', 'agent') AND is_banned = 0 ORDER BY role ASC, username ASC")->fetchAll();
 } elseif ($userRole === 'agency') {
-    // Agency can assign to itself or its assigned agents
     $stmtStaff = $pdo->prepare("SELECT id, username, role FROM users WHERE (agency_id = ? OR id = ?) AND is_banned = 0 AND role IN ('agency', 'agent') ORDER BY username ASC");
     $stmtStaff->execute([$userId, $userId]);
+    $assignableStaff = $stmtStaff->fetchAll();
+} elseif ($userRole === 'agent') {
+    $stmtStaff = $pdo->prepare("SELECT id, username, role FROM users WHERE id = ? AND is_banned = 0");
+    $stmtStaff->execute([$userId]);
     $assignableStaff = $stmtStaff->fetchAll();
 }
 
 // --- FETCH TICKETS BASED ON ROLE SCOPE ---
 if ($userRole === 'admin') {
-    // Admin sees all system tickets
     $stmt = $pdo->query("
-        SELECT t.*, c.name AS category_name, u.username AS user_username, a.username AS assigned_agent, a.role AS assigned_role
+        SELECT t.*, c.name AS category_name, u.username AS user_username, a.username AS assigned_agent
         FROM tickets t 
         LEFT JOIN categories c ON t.category_id = c.id 
         LEFT JOIN users u ON t.user_id = u.id 
@@ -82,9 +127,8 @@ if ($userRole === 'admin') {
         ORDER BY t.created_at DESC
     ");
 } elseif ($userRole === 'agency') {
-    // Agency sees tickets assigned to its agents, submitted by its users, assigned to itself, OR completely unassigned
     $stmt = $pdo->prepare("
-        SELECT t.*, c.name AS category_name, u.username AS user_username, a.username AS assigned_agent, a.role AS assigned_role
+        SELECT t.*, c.name AS category_name, u.username AS user_username, a.username AS assigned_agent
         FROM tickets t 
         LEFT JOIN categories c ON t.category_id = c.id 
         LEFT JOIN users u ON t.user_id = u.id 
@@ -94,20 +138,33 @@ if ($userRole === 'admin') {
     ");
     $stmt->execute([$userId, $userId, $userId]);
 } elseif ($userRole === 'agent') {
-    // Agent sees tickets directly assigned to them OR assigned to their parent agency
     $stmt = $pdo->prepare("
-        SELECT t.*, c.name AS category_name, u.username AS user_username, a.username AS assigned_agent, a.role AS assigned_role
+        SELECT t.*, c.name AS category_name, u.username AS user_username, a.username AS assigned_agent
         FROM tickets t 
         LEFT JOIN categories c ON t.category_id = c.id 
         LEFT JOIN users u ON t.user_id = u.id 
         LEFT JOIN users a ON t.assigned_to = a.id 
-        WHERE t.assigned_to = ? OR t.assigned_to = (SELECT agency_id FROM users WHERE id = ?)
+        WHERE t.assigned_to = ? OR t.assigned_to = (SELECT agency_id FROM users WHERE id = ?) OR t.id IN (SELECT ticket_id FROM ticket_followers WHERE user_id = ?)
         ORDER BY t.created_at DESC
     ");
-    $stmt->execute([$userId, $userId]);
+    $stmt->execute([$userId, $userId, $userId]);
 }
 
 $tickets = $stmt->fetchAll();
+
+// Helper function to fetch all followers for a specific ticket
+function get_ticket_followers(PDO $pdo, int $ticketId): array {
+    $stmt = $pdo->prepare("
+        SELECT DISTINCT u.id, u.username, u.role, u.agency_id 
+        FROM users u 
+        LEFT JOIN ticket_followers tf ON tf.user_id = u.id 
+        LEFT JOIN tickets t ON t.assigned_to = u.id 
+        WHERE (tf.ticket_id = ? OR t.id = ?) AND u.is_banned = 0
+        ORDER BY u.role ASC, u.username ASC
+    ");
+    $stmt->execute([$ticketId, $ticketId]);
+    return $stmt->fetchAll();
+}
 
 require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/sidebar.php';
@@ -138,13 +195,14 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                 <th>Category</th>
                                 <th>Customer / Email</th>
                                 <th>Status</th>
-                                <th>Assigned To</th>
+                                <th>Assigned / Following</th>
                                 <th>Created At</th>
-                                <th class="text-center">Action</th>
+                                <th class="text-center">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($tickets as $ticket): ?>
+                                <?php $followers = get_ticket_followers($pdo, $ticket['id']); ?>
                                 <tr>
                                     <td>
                                         <span class="fw-bold text-primary">#<?php echo htmlspecialchars($ticket['tracking_code']); ?></span>
@@ -174,38 +232,103 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                         <span class="badge <?php echo $statusClass; ?>"><?php echo strtoupper(str_replace('_', ' ', $ticket['status'])); ?></span>
                                     </td>
                                     <td>
-                                        <?php if (in_array($userRole, ['admin', 'agency'], true)): ?>
-                                            <!-- Assignment Form for Admin and Agency -->
-                                            <form method="POST" action="tickets.php" class="d-inline-flex align-items-center gap-1 m-0">
-                                                <input type="hidden" name="action" value="assign_ticket">
-                                                <input type="hidden" name="ticket_id" value="<?php echo (int)$ticket['id']; ?>">
-                                                <select name="assigned_to" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
-                                                    <option value="">-- Unassigned --</option>
-                                                    <?php foreach ($assignableStaff as $staff): ?>
-                                                        <option value="<?php echo (int)$staff['id']; ?>" <?php echo (int)$ticket['assigned_to'] === (int)$staff['id'] ? 'selected' : ''; ?>>
-                                                            <?php echo htmlspecialchars($staff['username']) . ' (' . strtoupper($staff['role']) . ')'; ?>
-                                                        </option>
-                                                    <?php endforeach; ?>
-                                                </select>
-                                            </form>
+                                        <?php if (empty($followers)): ?>
+                                            <span class="text-muted small">Unassigned</span>
                                         <?php else: ?>
-                                            <!-- Read-only view for Agents -->
-                                            <?php if ($ticket['assigned_agent']): ?>
-                                                <span class="badge bg-dark">
-                                                    <i class="fa-solid fa-user-check me-1"></i> <?php echo htmlspecialchars($ticket['assigned_agent']); ?>
-                                                </span>
-                                            <?php else: ?>
-                                                <span class="text-muted small">Unassigned</span>
-                                            <?php endif; ?>
+                                            <div class="d-flex flex-wrap gap-1">
+                                                <?php foreach ($followers as $f): ?>
+                                                    <span class="badge bg-dark text-white" title="<?php echo strtoupper($f['role']); ?>">
+                                                        <i class="fa-solid fa-user-check me-1 text-info"></i><?php echo htmlspecialchars($f['username']); ?>
+                                                    </span>
+                                                <?php endforeach; ?>
+                                            </div>
                                         <?php endif; ?>
                                     </td>
                                     <td>
                                         <small><?php echo date('Y-m-d H:i', strtotime($ticket['created_at'])); ?></small>
                                     </td>
                                     <td class="text-center">
-                                        <a href="/track.php?code=<?php echo urlencode($ticket['tracking_code']); ?>&token=<?php echo urlencode($ticket['access_token']); ?>" class="btn btn-sm btn-outline-primary" title="Manage Ticket">
-                                            <i class="fa-solid fa-eye me-1"></i> View & Reply
-                                        </a>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <!-- View & Reply Main Button -->
+                                            <a href="/track.php?code=<?php echo urlencode($ticket['tracking_code']); ?>&token=<?php echo urlencode($ticket['access_token']); ?>" class="btn btn-outline-primary" title="View & Reply Ticket">
+                                                <i class="fa-solid fa-eye me-1"></i> View
+                                            </a>
+
+                                            <!-- Assignees / Followers Modal Trigger Button -->
+                                            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#assignModal<?php echo $ticket['id']; ?>" title="Manage Assignees & Followers">
+                                                <i class="fa-solid fa-user-plus"></i>
+                                            </button>
+                                        </div>
+
+                                        <!-- Modal for Managing Staff Assignees & Followers -->
+                                        <div class="modal fade text-start" id="assignModal<?php echo $ticket['id']; ?>" tabindex="-1" aria-hidden="true">
+                                            <div class="modal-dialog modal-dialog-centered">
+                                                <div class="modal-content">
+                                                    <div class="modal-header bg-dark text-white">
+                                                        <h5 class="modal-title">
+                                                            <i class="fa-solid fa-users-gear me-2"></i> Manage Followers (#<?php echo htmlspecialchars($ticket['tracking_code']); ?>)
+                                                        </h5>
+                                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <h6>Current Assigned / Following Staff:</h6>
+                                                        <ul class="list-group mb-3">
+                                                            <?php if (empty($followers)): ?>
+                                                                <li class="list-group-item text-muted small">No staff assigned or following this ticket.</li>
+                                                            <?php else: ?>
+                                                                <?php foreach ($followers as $f): ?>
+                                                                    <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+                                                                        <div>
+                                                                            <strong><?php echo htmlspecialchars($f['username']); ?></strong>
+                                                                            <span class="badge bg-secondary ms-1"><?php echo strtoupper($f['role']); ?></span>
+                                                                        </div>
+                                                                        <?php 
+                                                                            $canRemove = false;
+                                                                            if ($userRole === 'admin') $canRemove = true;
+                                                                            elseif ($userRole === 'agency' && ((int)$f['agency_id'] === $userId || (int)$f['id'] === $userId)) $canRemove = true;
+                                                                            elseif ($userRole === 'agent' && (int)$f['id'] === $userId) $canRemove = true;
+                                                                        ?>
+                                                                        <?php if ($canRemove): ?>
+                                                                            <form method="POST" action="tickets.php" class="m-0">
+                                                                                <input type="hidden" name="action" value="remove_follower">
+                                                                                <input type="hidden" name="ticket_id" value="<?php echo $ticket['id']; ?>">
+                                                                                <input type="hidden" name="staff_id" value="<?php echo $f['id']; ?>">
+                                                                                <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Remove staff from ticket">
+                                                                                    <i class="fa-solid fa-xmark"></i>
+                                                                                </button>
+                                                                            </form>
+                                                                        <?php endif; ?>
+                                                                    </li>
+                                                                <?php endforeach; ?>
+                                                            <?php endif; ?>
+                                                        </ul>
+
+                                                        <hr>
+                                                        <h6>Add Staff Member / Agency:</h6>
+                                                        <form method="POST" action="tickets.php" class="d-flex gap-2">
+                                                            <input type="hidden" name="action" value="add_follower">
+                                                            <input type="hidden" name="ticket_id" value="<?php echo $ticket['id']; ?>">
+                                                            
+                                                            <select name="staff_id" class="form-select form-select-sm" required>
+                                                                <option value="">-- Select Staff Member --</option>
+                                                                <?php foreach ($assignableStaff as $s): ?>
+                                                                    <option value="<?php echo $s['id']; ?>">
+                                                                        <?php echo htmlspecialchars($s['username']) . ' (' . strtoupper($s['role']) . ')'; ?>
+                                                                    </option>
+                                                                <?php endforeach; ?>
+                                                            </select>
+                                                            <button type="submit" class="btn btn-sm btn-primary">
+                                                                <i class="fa-solid fa-plus me-1"></i> Add
+                                                            </button>
+                                                        </form>
+                                                    </div>
+                                                    <div class="modal-footer py-2">
+                                                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
