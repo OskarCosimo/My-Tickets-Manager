@@ -1,6 +1,6 @@
 <?php
 // admin/settings.php
-// Admin configuration settings page with OAuth providers and Dynamic Redirect URIs
+// Admin configuration settings page with OAuth providers, AI, and Theme Branding Customization
 session_start();
 require_once __DIR__ . '/../includes/config.php';
 
@@ -53,6 +53,41 @@ $msCallbackUrl      = $baseUrl . '/auth/microsoft-callback.php';
                         <input type="hidden" name="settings[allow_guest_tickets]" value="0">
                         <input type="checkbox" name="settings[allow_guest_tickets]" value="1" class="form-check-input" id="allowGuest" <?php echo get_setting($pdo, 'allow_guest_tickets') === '1' ? 'checked' : ''; ?>>
                         <label class="form-check-label" for="allowGuest">Allow Guest Ticket Submissions</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Theme & Branding Customization -->
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-dark text-white"><i class="fa-solid fa-palette me-2"></i> Theme & Branding Customization</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Site Logo Image URL (Optional)</label>
+                        <input type="url" name="settings[theme_logo_url]" class="form-control" placeholder="https://example.com/logo.png" value="<?php echo htmlspecialchars(get_setting($pdo, 'theme_logo_url', '')); ?>">
+                        <div class="form-text text-muted">
+                            <i class="fa-solid fa-circle-info me-1"></i> Recommended dimensions: <strong>180 x 40 px</strong> (Max height: 40px). If left empty, the site text title will be displayed instead.
+                        </div>
+                    </div>
+
+                    <hr>
+                    <h6><i class="fa-solid fa-paintbrush me-1"></i> Custom Layout Colors</h6>
+                    <div class="row g-3 mt-1">
+                        <div class="col-md-3">
+                            <label class="form-label">Header Background</label>
+                            <input type="color" name="settings[theme_header_bg]" class="form-control form-control-color w-100" value="<?php echo htmlspecialchars(get_setting($pdo, 'theme_header_bg', '#212529')); ?>">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Header Text Color</label>
+                            <input type="color" name="settings[theme_header_text]" class="form-control form-control-color w-100" value="<?php echo htmlspecialchars(get_setting($pdo, 'theme_header_text', '#ffffff')); ?>">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Sidebar Background</label>
+                            <input type="color" name="settings[theme_sidebar_bg]" class="form-control form-control-color w-100" value="<?php echo htmlspecialchars(get_setting($pdo, 'theme_sidebar_bg', '#212529')); ?>">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Sidebar Text Color</label>
+                            <input type="color" name="settings[theme_sidebar_text]" class="form-control form-control-color w-100" value="<?php echo htmlspecialchars(get_setting($pdo, 'theme_sidebar_text', '#f8f9fa')); ?>">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -322,7 +357,7 @@ $msCallbackUrl      = $baseUrl . '/auth/microsoft-callback.php';
                 <div class="card-body">
                     <div class="mb-3">
                         <label class="form-label">LibreTranslate Endpoint URL</label>
-                        <input type="url" name="settings[libretranslate_url]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'libretranslate_url', '[https://libretranslate.com](https://libretranslate.com)')); ?>">
+                        <input type="url" name="settings[libretranslate_url]" class="form-control" value="<?php echo htmlspecialchars(get_setting($pdo, 'libretranslate_url', 'https://libretranslate.com')); ?>">
                     </div>
                 </div>
             </div>
