@@ -119,16 +119,15 @@ if ($userRole === 'admin') {
 // --- FETCH TICKETS BASED ON ROLE SCOPE ---
 if ($userRole === 'admin') {
     $stmt = $pdo->query("
-        SELECT t.*, c.name AS category_name, u.username AS user_username, a.username AS assigned_agent
+        SELECT t.*, c.name AS category_name, u.username AS user_username
         FROM tickets t 
         LEFT JOIN categories c ON t.category_id = c.id 
         LEFT JOIN users u ON t.user_id = u.id 
-        LEFT JOIN users a ON t.assigned_to = a.id 
         ORDER BY t.created_at DESC
     ");
 } elseif ($userRole === 'agency') {
     $stmt = $pdo->prepare("
-        SELECT t.*, c.name AS category_name, u.username AS user_username, a.username AS assigned_agent
+        SELECT t.*, c.name AS category_name, u.username AS user_username
         FROM tickets t 
         LEFT JOIN categories c ON t.category_id = c.id 
         LEFT JOIN users u ON t.user_id = u.id 
@@ -139,11 +138,10 @@ if ($userRole === 'admin') {
     $stmt->execute([$userId, $userId, $userId]);
 } elseif ($userRole === 'agent') {
     $stmt = $pdo->prepare("
-        SELECT t.*, c.name AS category_name, u.username AS user_username, a.username AS assigned_agent
+        SELECT t.*, c.name AS category_name, u.username AS user_username
         FROM tickets t 
         LEFT JOIN categories c ON t.category_id = c.id 
         LEFT JOIN users u ON t.user_id = u.id 
-        LEFT JOIN users a ON t.assigned_to = a.id 
         WHERE t.assigned_to = ? OR t.assigned_to = (SELECT agency_id FROM users WHERE id = ?) OR t.id IN (SELECT ticket_id FROM ticket_followers WHERE user_id = ?)
         ORDER BY t.created_at DESC
     ");
@@ -152,7 +150,7 @@ if ($userRole === 'admin') {
 
 $tickets = $stmt->fetchAll();
 
-// Helper function to fetch all followers for a specific ticket
+// Helper function to fetch all followers for a specific ticket inside modal
 function get_ticket_followers(PDO $pdo, int $ticketId): array {
     $stmt = $pdo->prepare("
         SELECT DISTINCT u.id, u.username, u.role, u.agency_id 
@@ -195,7 +193,6 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                 <th>Category</th>
                                 <th>Customer / Email</th>
                                 <th>Status</th>
-                                <th>Assigned / Following</th>
                                 <th>Created At</th>
                                 <th class="text-center">Actions</th>
                             </tr>
@@ -230,19 +227,6 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                             elseif ($ticket['status'] === 'closed') $statusClass = 'bg-success';
                                         ?>
                                         <span class="badge <?php echo $statusClass; ?>"><?php echo strtoupper(str_replace('_', ' ', $ticket['status'])); ?></span>
-                                    </td>
-                                    <td>
-                                        <?php if (empty($followers)): ?>
-                                            <span class="text-muted small">Unassigned</span>
-                                        <?php else: ?>
-                                            <div class="d-flex flex-wrap gap-1">
-                                                <?php foreach ($followers as $f): ?>
-                                                    <span class="badge bg-dark text-white" title="<?php echo strtoupper($f['role']); ?>">
-                                                        <i class="fa-solid fa-user-check me-1 text-info"></i><?php echo htmlspecialchars($f['username']); ?>
-                                                    </span>
-                                                <?php endforeach; ?>
-                                            </div>
-                                        <?php endif; ?>
                                     </td>
                                     <td>
                                         <small><?php echo date('Y-m-d H:i', strtotime($ticket['created_at'])); ?></small>
@@ -348,7 +332,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
 <script>
     $(document).ready(function() {
         $('#ticketsTable').DataTable({
-            "order": [[ 6, "desc" ]],
+            "order": [[ 5, "desc" ]],
             "pageLength": 25,
             "search": {
                 "search": "<?php echo htmlspecialchars($searchQuery); ?>"
