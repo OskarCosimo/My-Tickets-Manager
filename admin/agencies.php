@@ -1,6 +1,6 @@
 <?php
 // admin/agencies.php
-// Agency & Agent Management Panel with Statistics & Cascade Banning
+// Agency & Agent Management Panel with Single Table View & Nested Agent Modals
 session_start();
 require_once __DIR__ . '/../includes/config.php';
 
@@ -15,7 +15,7 @@ if (!in_array($userRole, ['admin', 'agency'], true)) {
 $success = '';
 $error   = '';
 
-// --- ACTIONS: BAN / UNBAN / TOGGLE AGENT ---
+// --- ACTIONS: BAN / UNBAN AGENTS AND AGENCIES ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     
     // ACTION 1: Admin Bans/Unbans Agency (Cascades to all assigned Agents)
@@ -57,9 +57,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 }
 
-// Helper query function to fetch stats and detailed logs for a single agent
+// Helper query function to fetch stats for a single agent
 function get_agent_activity_data(PDO $pdo, int $agentId): array {
-    // 1. General Metrics
     $assignedTickets = $pdo->prepare("SELECT COUNT(*) FROM tickets WHERE assigned_to = ?");
     $assignedTickets->execute([$agentId]);
 
@@ -69,14 +68,13 @@ function get_agent_activity_data(PDO $pdo, int $agentId): array {
     $closedTickets = $pdo->prepare("SELECT COUNT(*) FROM tickets WHERE assigned_to = ? AND status = 'closed'");
     $closedTickets->execute([$agentId]);
 
-    // 2. Timestamps & Recent activity log (Replies posted)
     $stmtRepliesLog = $pdo->prepare("
         SELECT r.created_at, r.message, t.tracking_code, t.subject 
         FROM ticket_replies r 
         JOIN tickets t ON r.ticket_id = t.id 
         WHERE r.user_id = ? 
         ORDER BY r.created_at DESC 
-        LIMIT 15
+        LIMIT 10
     ");
     $stmtRepliesLog->execute([$agentId]);
 
@@ -88,9 +86,9 @@ function get_agent_activity_data(PDO $pdo, int $agentId): array {
     ];
 }
 
-// Fetch data based on role scope
+// Fetch data based on scope
 if ($userRole === 'admin') {
-    // Admin fetches all Agencies with total Agents count
+    // Fetch all Agencies with total Agents count
     $stmtAgencies = $pdo->query("
         SELECT a.*, COUNT(u.id) AS agent_count 
         FROM users a 
@@ -100,16 +98,10 @@ if ($userRole === 'admin') {
         ORDER BY a.created_at DESC
     ");
     $agencies = $stmtAgencies->fetchAll();
-}
-
-// Fetch Agents belonging to current context
-if ($userRole === 'agency') {
+} else {
+    // Agency role fetches its own assigned Agents
     $stmtAgents = $pdo->prepare("SELECT * FROM users WHERE agency_id = ? AND role = 'agent' ORDER BY created_at DESC");
     $stmtAgents->execute([$userId]);
-    $myAgents = $stmtAgents->fetchAll();
-} else {
-    // Admin fetches all agents globally
-    $stmtAgents = $pdo->query("SELECT u.*, ag.username AS agency_name FROM users u LEFT JOIN users ag ON u.agency_id = ag.id WHERE u.role = 'agent' ORDER BY u.created_at DESC");
     $myAgents = $stmtAgents->fetchAll();
 }
 
@@ -122,16 +114,18 @@ require_once __DIR__ . '/../includes/sidebar.php';
 
 <main class="main-content">
     <div class="container-fluid my-4">
-        <h2><i class="fa-solid fa-building-user me-2"></i> <?php echo $userRole === 'admin' ? 'Agencies & Agents Overview' : 'My Agents Management'; ?></h2>
+        <h2><i class="fa-solid fa-building-user me-2"></i> <?php echo $userRole === 'admin' ? 'Agencies Management' : 'My Agents Management'; ?></h2>
         <hr>
 
-        <?php if ($success): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
-        <?php if ($error): ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
+        <?php if ($success): ?><div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div><?php endif; ?>
+        <?php if ($error): ?><div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div><?php endif; ?>
 
         <?php if ($userRole === 'admin'): ?>
-            <!-- ADMIN VIEW: Registered Agencies -->
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-dark text-white fw-bold">Registered Agencies</div>
+            <!-- ADMIN VIEW: Single Table for Registered Agencies -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white fw-bold">
+                    <i class="fa-solid fa-building me-2"></i> Registered Agencies
+                </div>
                 <div class="card-body">
                     <div class="table-responsive">
                         <table id="agenciesTable" class="table table-striped table-hover align-middle w-100">
@@ -139,7 +133,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                 <tr>
                                     <th>Agency Name</th>
                                     <th>Email</th>
-                                    <th>Agents Count</th>
+                                    <th>Total Agents</th>
                                     <th>Status</th>
                                     <th>Created At</th>
                                     <th class="text-center">Actions</th>
@@ -147,10 +141,18 @@ require_once __DIR__ . '/../includes/sidebar.php';
                             </thead>
                             <tbody>
                                 <?php foreach ($agencies as $agency): ?>
+                                    <?php 
+                                        // Fetch agents belonging to this agency for the modal
+                                        $stmtAgencyAgents = $pdo->prepare("SELECT * FROM users WHERE agency_id = ? AND role = 'agent' ORDER BY created_at DESC");
+                                        $stmtAgencyAgents->execute([$agency['id']]);
+                                        $agencyAgents = $stmtAgencyAgents->fetchAll();
+                                    ?>
                                     <tr>
                                         <td><strong><?php echo htmlspecialchars($agency['username']); ?></strong></td>
                                         <td><?php echo htmlspecialchars($agency['email']); ?></td>
-                                        <td><span class="badge bg-info text-dark"><?php echo $agency['agent_count']; ?> Agents</span></td>
+                                        <td>
+                                            <span class="badge bg-info text-dark"><?php echo $agency['agent_count']; ?> Agents</span>
+                                        </td>
                                         <td>
                                             <?php if (!empty($agency['is_banned'])): ?>
                                                 <span class="badge bg-danger">Banned (Cascade)</span>
@@ -160,15 +162,91 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                         </td>
                                         <td><small><?php echo date('Y-m-d H:i', strtotime($agency['created_at'])); ?></small></td>
                                         <td class="text-center">
-                                            <form method="POST" action="agencies.php" class="d-inline">
-                                                <input type="hidden" name="action" value="toggle_agency_ban">
-                                                <input type="hidden" name="agency_id" value="<?php echo $agency['id']; ?>">
-                                                <input type="hidden" name="banned_status" value="<?php echo !empty($agency['is_banned']) ? '0' : '1'; ?>">
-                                                <button type="submit" class="btn btn-sm <?php echo !empty($agency['is_banned']) ? 'btn-success' : 'btn-danger'; ?>" onclick="return confirm('<?php echo !empty($agency['is_banned']) ? 'Unban this agency and restore its agents?' : 'Ban this agency? All assigned agents will be automatically banned!'; ?>');">
-                                                    <i class="fa-solid <?php echo !empty($agency['is_banned']) ? 'fa-user-check' : 'fa-user-slash'; ?> me-1"></i>
-                                                    <?php echo !empty($agency['is_banned']) ? 'Unban Agency' : 'Ban Agency'; ?>
+                                            <div class="btn-group btn-group-sm">
+                                                <!-- View Agents Modal Trigger Button -->
+                                                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#agentsModal<?php echo $agency['id']; ?>" title="View & Manage Agency Agents">
+                                                    <i class="fa-solid fa-users me-1"></i> Agents (<?php echo $agency['agent_count']; ?>)
                                                 </button>
-                                            </form>
+
+                                                <!-- Ban / Unban Agency Button -->
+                                                <form method="POST" action="agencies.php" class="d-inline m-0">
+                                                    <input type="hidden" name="action" value="toggle_agency_ban">
+                                                    <input type="hidden" name="agency_id" value="<?php echo $agency['id']; ?>">
+                                                    <input type="hidden" name="banned_status" value="<?php echo !empty($agency['is_banned']) ? '0' : '1'; ?>">
+                                                    <button type="submit" class="btn <?php echo !empty($agency['is_banned']) ? 'btn-success' : 'btn-outline-danger'; ?>" onclick="return confirm('<?php echo !empty($agency['is_banned']) ? 'Unban this agency and restore its agents?' : 'Ban this agency? All assigned agents will be automatically banned!'; ?>');" title="<?php echo !empty($agency['is_banned']) ? 'Unban Agency' : 'Ban Agency'; ?>">
+                                                        <i class="fa-solid <?php echo !empty($agency['is_banned']) ? 'fa-user-check' : 'fa-user-slash'; ?>"></i>
+                                                    </button>
+                                                </form>
+                                            </div>
+
+                                            <!-- Agency Agents Modal -->
+                                            <div class="modal fade text-start" id="agentsModal<?php echo $agency['id']; ?>" tabindex="-1" aria-hidden="true">
+                                                <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                                                    <div class="modal-content">
+                                                        <div class="modal-header bg-dark text-white">
+                                                            <h5 class="modal-title">
+                                                                <i class="fa-solid fa-building me-2"></i> Agents in Agency: <?php echo htmlspecialchars($agency['username']); ?>
+                                                            </h5>
+                                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            <?php if (empty($agencyAgents)): ?>
+                                                                <div class="text-center text-muted py-4">No agents registered under this agency yet.</div>
+                                                            <?php else: ?>
+                                                                <div class="table-responsive">
+                                                                    <table class="table table-striped table-hover align-middle">
+                                                                        <thead class="table-light">
+                                                                            <tr>
+                                                                                <th>Agent Username</th>
+                                                                                <th>Email</th>
+                                                                                <th>Status</th>
+                                                                                <th>Assigned Tickets</th>
+                                                                                <th>Replies Sent</th>
+                                                                                <th>Joined Date</th>
+                                                                                <th class="text-end">Actions</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            <?php foreach ($agencyAgents as $agent): ?>
+                                                                                <?php $stats = get_agent_activity_data($pdo, $agent['id']); ?>
+                                                                                <tr>
+                                                                                    <td><strong><?php echo htmlspecialchars($agent['username']); ?></strong></td>
+                                                                                    <td><?php echo htmlspecialchars($agent['email']); ?></td>
+                                                                                    <td>
+                                                                                        <?php if (!empty($agent['is_banned'])): ?>
+                                                                                            <span class="badge bg-danger">Banned</span>
+                                                                                        <?php else: ?>
+                                                                                            <span class="badge bg-success">Active</span>
+                                                                                        <?php endif; ?>
+                                                                                    </td>
+                                                                                    <td><span class="badge bg-primary"><?php echo $stats['assigned']; ?> Tickets</span></td>
+                                                                                    <td><span class="badge bg-info text-dark"><?php echo $stats['replies']; ?> Replies</span></td>
+                                                                                    <td><small><?php echo date('Y-m-d', strtotime($agent['created_at'])); ?></small></td>
+                                                                                    <td class="text-end">
+                                                                                        <!-- Ban / Unban Individual Agent -->
+                                                                                        <form method="POST" action="agencies.php" class="d-inline m-0">
+                                                                                            <input type="hidden" name="action" value="toggle_agent_ban">
+                                                                                            <input type="hidden" name="agent_id" value="<?php echo $agent['id']; ?>">
+                                                                                            <input type="hidden" name="banned_status" value="<?php echo !empty($agent['is_banned']) ? '0' : '1'; ?>">
+                                                                                            <button type="submit" class="btn btn-sm <?php echo !empty($agent['is_banned']) ? 'btn-success' : 'btn-outline-danger'; ?>" title="<?php echo !empty($agent['is_banned']) ? 'Unban Agent' : 'Ban Agent'; ?>">
+                                                                                                <i class="fa-solid <?php echo !empty($agent['is_banned']) ? 'fa-user-check' : 'fa-user-slash'; ?>"></i>
+                                                                                            </button>
+                                                                                        </form>
+                                                                                    </td>
+                                                                                </tr>
+                                                                            <?php endforeach; ?>
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                        <div class="modal-footer py-2">
+                                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -177,143 +255,139 @@ require_once __DIR__ . '/../includes/sidebar.php';
                     </div>
                 </div>
             </div>
-        <?php endif; ?>
 
-        <!-- AGENCY & ADMIN VIEW: Agent Management & Live Activity Stats -->
-        <div class="card shadow-sm">
-            <div class="card-header bg-dark text-white fw-bold">
-                <i class="fa-solid fa-user-gear me-2"></i> <?php echo $userRole === 'admin' ? 'All System Agents' : 'My Assigned Agents'; ?>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table id="agentsTable" class="table table-striped table-hover align-middle w-100">
-                        <thead class="table-dark">
-                            <tr>
-                                <th>Agent Username</th>
-                                <th>Email</th>
-                                <?php if ($userRole === 'admin'): ?><th>Assigned Agency</th><?php endif; ?>
-                                <th>Status</th>
-                                <th>Joined Date</th>
-                                <th class="text-center">Actions & Statistics</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($myAgents as $agent): ?>
-                                <?php $stats = get_agent_activity_data($pdo, $agent['id']); ?>
+        <?php else: ?>
+
+            <!-- AGENCY VIEW: Direct Table for Agency's Registered Agents -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white fw-bold">
+                    <i class="fa-solid fa-user-gear me-2"></i> My Assigned Agents
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table id="myAgentsTable" class="table table-striped table-hover align-middle w-100">
+                            <thead class="table-dark">
                                 <tr>
-                                    <td><strong><?php echo htmlspecialchars($agent['username']); ?></strong></td>
-                                    <td><?php echo htmlspecialchars($agent['email']); ?></td>
-                                    <?php if ($userRole === 'admin'): ?>
+                                    <th>Agent Username</th>
+                                    <th>Email</th>
+                                    <th>Status</th>
+                                    <th>Joined Date</th>
+                                    <th class="text-center">Actions & Statistics</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($myAgents as $agent): ?>
+                                    <?php $stats = get_agent_activity_data($pdo, $agent['id']); ?>
+                                    <tr>
+                                        <td><strong><?php echo htmlspecialchars($agent['username']); ?></strong></td>
+                                        <td><?php echo htmlspecialchars($agent['email']); ?></td>
                                         <td>
-                                            <?php echo !empty($agent['agency_name']) ? htmlspecialchars($agent['agency_name']) : '<span class="text-muted small">Independent</span>'; ?>
+                                            <?php if (!empty($agent['is_banned'])): ?>
+                                                <span class="badge bg-danger">Banned</span>
+                                            <?php else: ?>
+                                                <span class="badge bg-success">Active</span>
+                                            <?php endif; ?>
                                         </td>
-                                    <?php endif; ?>
-                                    <td>
-                                        <?php if (!empty($agent['is_banned'])): ?>
-                                            <span class="badge bg-danger">Banned</span>
-                                        <?php else: ?>
-                                            <span class="badge bg-success">Active</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td><small><?php echo date('Y-m-d H:i', strtotime($agent['created_at'])); ?></small></td>
-                                    <td class="text-center">
-                                        <!-- Activity Modal Trigger Button -->
-                                        <button type="button" class="btn btn-sm btn-outline-info me-1" data-bs-toggle="modal" data-bs-target="#statsModal<?php echo $agent['id']; ?>">
-                                            <i class="fa-solid fa-chart-pie me-1"></i> View Stats & Logs
-                                        </button>
+                                        <td><small><?php echo date('Y-m-d H:i', strtotime($agent['created_at'])); ?></small></td>
+                                        <td class="text-center">
+                                            <div class="btn-group btn-group-sm">
+                                                <!-- Activity Stats Trigger Button -->
+                                                <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#statsModal<?php echo $agent['id']; ?>">
+                                                    <i class="fa-solid fa-chart-pie me-1"></i> View Stats & Logs
+                                                </button>
 
-                                        <!-- Ban / Unban Toggle Button -->
-                                        <form method="POST" action="agencies.php" class="d-inline">
-                                            <input type="hidden" name="action" value="toggle_agent_ban">
-                                            <input type="hidden" name="agent_id" value="<?php echo $agent['id']; ?>">
-                                            <input type="hidden" name="banned_status" value="<?php echo !empty($agent['is_banned']) ? '0' : '1'; ?>">
-                                            <button type="submit" class="btn btn-sm <?php echo !empty($agent['is_banned']) ? 'btn-success' : 'btn-danger'; ?>">
-                                                <i class="fa-solid <?php echo !empty($agent['is_banned']) ? 'fa-user-check' : 'fa-user-slash'; ?> me-1"></i>
-                                                <?php echo !empty($agent['is_banned']) ? 'Unban' : 'Ban'; ?>
-                                            </button>
-                                        </form>
+                                                <!-- Ban / Unban Toggle Button -->
+                                                <form method="POST" action="agencies.php" class="d-inline m-0">
+                                                    <input type="hidden" name="action" value="toggle_agent_ban">
+                                                    <input type="hidden" name="agent_id" value="<?php echo $agent['id']; ?>">
+                                                    <input type="hidden" name="banned_status" value="<?php echo !empty($agent['is_banned']) ? '0' : '1'; ?>">
+                                                    <button type="submit" class="btn <?php echo !empty($agent['is_banned']) ? 'btn-success' : 'btn-outline-danger'; ?>">
+                                                        <i class="fa-solid <?php echo !empty($agent['is_banned']) ? 'fa-user-check' : 'fa-user-slash'; ?>"></i>
+                                                    </button>
+                                                </form>
+                                            </div>
 
-                                        <!-- Agent Detailed Statistics Modal -->
-                                        <div class="modal fade text-start" id="statsModal<?php echo $agent['id']; ?>" tabindex="-1" aria-hidden="true">
-                                            <div class="modal-dialog modal-lg modal-dialog-centered">
-                                                <div class="modal-content">
-                                                    <div class="modal-header bg-dark text-white">
-                                                        <h5 class="modal-title">
-                                                            <i class="fa-solid fa-user-ninja me-2"></i> Agent Performance: <?php echo htmlspecialchars($agent['username']); ?>
-                                                        </h5>
-                                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                                                    </div>
-                                                    <div class="modal-body">
-                                                        <!-- Summary Cards -->
-                                                        <div class="row g-3 mb-4">
-                                                            <div class="col-md-4">
-                                                                <div class="card bg-primary text-white text-center">
-                                                                    <div class="card-body py-2">
-                                                                        <h6 class="card-title mb-1">Assigned Tickets</h6>
-                                                                        <h3 class="m-0"><?php echo $stats['assigned']; ?></h3>
+                                            <!-- Agent Activity Log Modal for Agency -->
+                                            <div class="modal fade text-start" id="statsModal<?php echo $agent['id']; ?>" tabindex="-1" aria-hidden="true">
+                                                <div class="modal-dialog modal-lg modal-dialog-centered">
+                                                    <div class="modal-content">
+                                                        <div class="modal-header bg-dark text-white">
+                                                            <h5 class="modal-title">
+                                                                <i class="fa-solid fa-chart-line me-2"></i> Agent Performance: <?php echo htmlspecialchars($agent['username']); ?>
+                                                            </h5>
+                                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            <div class="row g-3 mb-4">
+                                                                <div class="col-md-4">
+                                                                    <div class="card bg-primary text-white text-center">
+                                                                        <div class="card-body py-2">
+                                                                            <h6 class="card-title mb-1">Assigned Tickets</h6>
+                                                                            <h3 class="m-0"><?php echo $stats['assigned']; ?></h3>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="col-md-4">
+                                                                    <div class="card bg-info text-dark text-center">
+                                                                        <div class="card-body py-2">
+                                                                            <h6 class="card-title mb-1">Total Replies Sent</h6>
+                                                                            <h3 class="m-0"><?php echo $stats['replies']; ?></h3>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="col-md-4">
+                                                                    <div class="card bg-success text-white text-center">
+                                                                        <div class="card-body py-2">
+                                                                            <h6 class="card-title mb-1">Closed / Resolved</h6>
+                                                                            <h3 class="m-0"><?php echo $stats['closed']; ?></h3>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                            <div class="col-md-4">
-                                                                <div class="card bg-info text-dark text-center">
-                                                                    <div class="card-body py-2">
-                                                                        <h6 class="card-title mb-1">Total Replies Sent</h6>
-                                                                        <h3 class="m-0"><?php echo $stats['replies']; ?></h3>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div class="col-md-4">
-                                                                <div class="card bg-success text-white text-center">
-                                                                    <div class="card-body py-2">
-                                                                        <h6 class="card-title mb-1">Closed / Resolved</h6>
-                                                                        <h3 class="m-0"><?php echo $stats['closed']; ?></h3>
-                                                                    </div>
-                                                                </div>
+
+                                                            <h6 class="fw-bold mb-2"><i class="fa-solid fa-clock-rotate-left me-1"></i> Recent Activity Feed</h6>
+                                                            <div class="table-responsive">
+                                                                <table class="table table-sm table-striped border">
+                                                                    <thead class="table-light">
+                                                                        <tr>
+                                                                            <th>Timestamp</th>
+                                                                            <th>Ticket Reference</th>
+                                                                            <th>Reply Preview</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        <?php if (empty($stats['logs'])): ?>
+                                                                            <tr><td colspan="3" class="text-center text-muted py-2">No activity recorded for this agent yet.</td></tr>
+                                                                        <?php else: ?>
+                                                                            <?php foreach ($stats['logs'] as $log): ?>
+                                                                                <tr>
+                                                                                    <td><small class="text-muted"><?php echo date('Y-m-d H:i:s', strtotime($log['created_at'])); ?></small></td>
+                                                                                    <td><strong>#<?php echo htmlspecialchars($log['tracking_code']); ?></strong> - <?php echo htmlspecialchars($log['subject']); ?></td>
+                                                                                    <td><small><?php echo htmlspecialchars(substr(strip_tags($log['message']), 0, 50)) . '...'; ?></small></td>
+                                                                                </tr>
+                                                                            <?php endforeach; ?>
+                                                                        <?php endif; ?>
+                                                                    </tbody>
+                                                                </table>
                                                             </div>
                                                         </div>
-
-                                                        <!-- Timestamps & Recent Activity Feed -->
-                                                        <h6 class="fw-bold mb-2"><i class="fa-solid fa-clock-rotate-left me-1"></i> Recent Support Responses & Timestamps</h6>
-                                                        <div class="table-responsive">
-                                                            <table class="table table-sm table-striped border">
-                                                                <thead class="table-light">
-                                                                    <tr>
-                                                                        <th>Timestamp</th>
-                                                                        <th>Ticket Reference</th>
-                                                                        <th>Reply Preview</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    <?php if (empty($stats['logs'])): ?>
-                                                                        <tr><td colspan="3" class="text-center text-muted py-2">No activity recorded for this agent yet.</td></tr>
-                                                                    <?php else: ?>
-                                                                        <?php foreach ($stats['logs'] as $log): ?>
-                                                                            <tr>
-                                                                                <td><small class="text-muted"><?php echo date('Y-m-d H:i:s', strtotime($log['created_at'])); ?></small></td>
-                                                                                <td><strong>#<?php echo htmlspecialchars($log['tracking_code']); ?></strong> - <?php echo htmlspecialchars($log['subject']); ?></td>
-                                                                                <td><small><?php echo htmlspecialchars(substr(strip_tags($log['message']), 0, 50)) . '...'; ?></small></td>
-                                                                            </tr>
-                                                                        <?php endforeach; ?>
-                                                                    <?php endif; ?>
-                                                                </tbody>
-                                                            </table>
+                                                        <div class="modal-footer py-2">
+                                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
                                                         </div>
-                                                    </div>
-                                                    <div class="modal-footer py-2">
-                                                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
 
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-        </div>
+
+        <?php endif; ?>
     </div>
 </main>
 
@@ -332,9 +406,9 @@ require_once __DIR__ . '/../includes/sidebar.php';
                 }
             });
         }
-        if ($('#agentsTable').length) {
-            $('#agentsTable').DataTable({
-                "order": [[ <?php echo $userRole === 'admin' ? '4' : '3'; ?>, "desc" ]],
+        if ($('#myAgentsTable').length) {
+            $('#myAgentsTable').DataTable({
+                "order": [[ 3, "desc" ]],
                 "pageLength": 10,
                 "language": {
                     "search": "Filter agents:"
