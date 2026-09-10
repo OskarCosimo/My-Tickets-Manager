@@ -72,6 +72,12 @@ if (!function_exists('index_exists')) {
 try {
     // --- INCREMENTAL DB MIGRATIONS HERE ---
 
+
+    // v1.0.16: Add auto_assign_tickets column for automatic ticket routing
+if (!column_exists($pdo, 'users', 'auto_assign_tickets')) {
+    $pdo->exec("ALTER TABLE `users` ADD COLUMN `auto_assign_tickets` TINYINT(1) NOT NULL DEFAULT '0'");
+}
+
     // v1.0.5: Add agency_id to users table for Agency role support
 if (!column_exists($pdo, 'users', 'agency_id')) {
     $pdo->exec("ALTER TABLE `users` ADD COLUMN `agency_id` INT UNSIGNED DEFAULT NULL");

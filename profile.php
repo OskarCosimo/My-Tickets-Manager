@@ -1,6 +1,6 @@
 <?php
 // profile.php
-// User Profile Settings Page with QR Code 2FA Activation
+// User Profile Settings Page with QR Code 2FA Activation & Ticket Auto-Assignment Settings
 session_start();
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/totp_helper.php';
@@ -52,6 +52,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Update Ticket Auto-Assignment Setting (Agencies & Agents only)
+    if ($action === 'update_auto_assign' && in_array($user['role'], ['agency', 'agent'], true)) {
+        $autoAssign = isset($_POST['auto_assign_tickets']) ? 1 : 0;
+        
+        $stmtAssign = $pdo->prepare("UPDATE users SET auto_assign_tickets = ? WHERE id = ?");
+        if ($stmtAssign->execute([$autoAssign, $userId])) {
+            $user['auto_assign_tickets'] = $autoAssign;
+            $success = 'Ticket management preferences updated successfully.';
+        } else {
+            $error = 'Failed to update auto-assignment setting.';
+        }
+    }
+
     // Change Password
     if ($action === 'change_password') {
         $currentPassword = $_POST['current_password'] ?? '';
@@ -60,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (empty($currentPassword) || empty($newPassword) || empty($confirmPassword)) {
             $error = 'Please fill in all password fields.';
-        } elseif (!password_verify($currentPassword, $user['password'])) {
+        } elseif (!password_verify($currentPassword, $user['password_hash'])) {
             $error = 'Current password is incorrect.';
         } elseif ($newPassword !== $confirmPassword) {
             $error = 'New password and confirmation do not match.';
@@ -68,9 +81,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'New password must be at least 8 characters long.';
         } else {
             $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
-            $stmtPass = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
+            $stmtPass = $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
             if ($stmtPass->execute([$hashedPassword, $userId])) {
-                $user['password'] = $hashedPassword;
+                $user['password_hash'] = $hashedPassword;
                 $success = 'Password changed successfully.';
             } else {
                 $error = 'Failed to update password.';
@@ -145,6 +158,37 @@ require_once __DIR__ . '/includes/sidebar.php';
                 </form>
             </div>
         </div>
+
+        <!-- Ticket Auto-Assignment Card (For Agencies and Agents) -->
+        <?php if (in_array($user['role'], ['agency', 'agent'], true)): ?>
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-dark text-white fw-bold">
+                    <i class="fa-solid fa-robot me-1"></i> Ticket Management Settings
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="profile.php">
+                        <input type="hidden" name="action" value="update_auto_assign">
+                        
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" name="auto_assign_tickets" value="1" id="autoAssignSwitch" <?php echo !empty($user['auto_assign_tickets']) ? 'checked' : ''; ?>>
+                            <label class="form-check-label fw-bold" for="autoAssignSwitch">
+                                Automatically assign new incoming tickets to my account
+                            </label>
+                        </div>
+                        
+                        <p class="text-muted small mb-3">
+                            <?php if ($user['role'] === 'agency'): ?>
+                                When enabled, new tickets will be automatically assigned to your agency upon creation and will instantly become accessible to all your agents.
+                            <?php else: ?>
+                                When enabled, new incoming tickets will be automatically assigned directly to your agent account upon submission.
+                            <?php endif; ?>
+                        </p>
+
+                        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk me-1"></i> Save Preferences</button>
+                    </form>
+                </div>
+            </div>
+        <?php endif; ?>
 
         <!-- Security & Password Card -->
         <div class="card mb-4 shadow-sm">

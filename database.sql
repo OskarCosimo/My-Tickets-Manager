@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS `users` (
   `password_hash` varchar(255) DEFAULT NULL,
   `two_factor_secret` varchar(255) DEFAULT NULL,
   `two_factor_enabled` tinyint(1) NOT NULL DEFAULT '0',
+  `is_banned` tinyint(1) NOT NULL DEFAULT '0',
+  `auto_assign_tickets` tinyint(1) NOT NULL DEFAULT '0',
   `reset_token` varchar(64) DEFAULT NULL,
   `reset_token_expires` datetime DEFAULT NULL,
   `role` varchar(20) NOT NULL DEFAULT 'user',

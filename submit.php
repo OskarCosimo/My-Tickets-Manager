@@ -1,6 +1,6 @@
 <?php
 // submit.php
-// Ticket submission page with Category selection, Pre-filled form support, and My-WYSIWYG editor integration
+// Ticket submission page with Category selection, Pre-filled form support, My-WYSIWYG editor, and Auto-Assignment engine
 session_start();
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/turnstile.php';
@@ -11,7 +11,7 @@ $turnstileEnabled = get_setting($pdo, 'turnstile_enabled', '0') === '1';
 $error = '';
 $success = '';
 
-// Pre-fill parameters support (allows pre-populating fields via GET or POST parameters like Hesk)
+// Pre-fill parameters support (allows pre-populating fields via GET or POST parameters)
 $preName     = trim($_REQUEST['name'] ?? $_REQUEST['guest_name'] ?? '');
 $preEmail    = trim($_REQUEST['email'] ?? $_REQUEST['guest_email'] ?? '');
 $preSubject  = trim($_REQUEST['subject'] ?? '');
@@ -56,6 +56,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $shouldSend) {
                 $stmt = $pdo->prepare("INSERT INTO tickets (tracking_code, access_token, user_id, category_id, guest_email, guest_name, subject, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
                 if ($stmt->execute([$trackingCode, $accessToken, $userId, $categoryId, $guestEmail, $guestName, $subject, $message])) {
                     $ticketId = $pdo->lastInsertId();
+
+                    // --- AUTOMATIC TICKET ROUTING & AUTO-ASSIGNMENT ---
+                    // Search for an active Agency or Agent with auto-assign enabled
+                    $stmtAutoAssign = $pdo->query("
+                        SELECT id 
+                        FROM users 
+                        WHERE auto_assign_tickets = 1 AND is_banned = 0 AND role IN ('agency', 'agent') 
+                        ORDER BY RAND() LIMIT 1
+                    ");
+                    $autoAssignUser = $stmtAutoAssign->fetch();
+
+                    if ($autoAssignUser) {
+                        $stmtUpdateTicket = $pdo->prepare("UPDATE tickets SET assigned_to = ? WHERE id = ?");
+                        $stmtUpdateTicket->execute([$autoAssignUser['id'], $ticketId]);
+                    }
+
                     $recipient = $guestEmail;
                     $trackingUrl = "https://" . $_SERVER['HTTP_HOST'] . "/track.php?code=" . $trackingCode . "&token=" . $accessToken . "&email=" . urlencode($recipient);
                     
