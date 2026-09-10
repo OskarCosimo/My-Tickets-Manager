@@ -1,10 +1,17 @@
 <?php
 // includes/header.php
-// Header with Bootstrap 5.3 Theme Switcher, responsive CSS, Turnstile JS API, and language selector
+// Header with Bootstrap 5.3 Theme Switcher, Branding logo, Custom Colors, and language selector
 require_once __DIR__ . '/config.php';
 $siteTitle = get_setting($pdo, 'site_title', 'My Tickets Manager');
 $availableLangs = get_available_languages();
 global $currentLang;
+
+// Fetch custom theme settings
+$logoUrl     = get_setting($pdo, 'theme_logo_url', '');
+$headerBg    = get_setting($pdo, 'theme_header_bg', '#212529');
+$headerText  = get_setting($pdo, 'theme_header_text', '#ffffff');
+$sidebarBg   = get_setting($pdo, 'theme_sidebar_bg', '#212529');
+$sidebarText = get_setting($pdo, 'theme_sidebar_text', '#f8f9fa');
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo htmlspecialchars($currentLang); ?>" data-bs-theme="auto">
@@ -40,19 +47,33 @@ global $currentLang;
         .wrapper { display: flex; flex: 1; align-items: stretch; width: 100%; }
         .main-content { flex: 1; padding: 20px; min-width: 0; }
 
-        /* Dynamic Sidebar Styling with Enhanced Contrast */
+        /* Custom Header Styling */
+        header.navbar-custom {
+            background-color: <?php echo htmlspecialchars($headerBg); ?> !important;
+            color: <?php echo htmlspecialchars($headerText); ?> !important;
+        }
+        header.navbar-custom .nav-link,
+        header.navbar-custom .navbar-brand,
+        header.navbar-custom #sidebarToggle {
+            color: <?php echo htmlspecialchars($headerText); ?> !important;
+        }
+
+        /* Dynamic Sidebar Styling with Custom Colors */
         #sidebar-wrapper {
             width: 240px;
             transition: width 0.3s ease;
             white-space: nowrap;
             overflow: hidden;
             flex-shrink: 0;
+            background-color: <?php echo htmlspecialchars($sidebarBg); ?> !important;
+            color: <?php echo htmlspecialchars($sidebarText); ?> !important;
         }
 
         #sidebar-wrapper .list-group-item {
             display: flex;
             align-items: center;
             padding: 0.75rem 1.25rem;
+            color: <?php echo htmlspecialchars($sidebarText); ?> !important;
             transition: background-color 0.2s ease, color 0.2s ease;
         }
 
@@ -68,7 +89,7 @@ global $currentLang;
         }
 
         #sidebar-wrapper .sidebar-header {
-            color: #0dcaf0 !important; /* Cyan highlight for high readability */
+            color: #0dcaf0 !important;
             letter-spacing: 0.5px;
         }
 
@@ -102,20 +123,27 @@ global $currentLang;
     </style>
 </head>
 <body>
-    <header class="navbar navbar-dark bg-dark sticky-top p-2 shadow">
+    <header class="navbar navbar-custom sticky-top p-2 shadow">
         <div class="container-fluid">
             <!-- Sidebar Toggle Hamburger Button -->
-            <button id="sidebarToggle" class="btn btn-dark text-white me-2 border-0" type="button">
+            <button id="sidebarToggle" class="btn text-white me-2 border-0 bg-transparent" type="button">
                 <i class="fa-solid fa-bars fs-5"></i>
             </button>
 
-            <a class="navbar-brand me-0 px-2 fs-6" href="/"><?php echo htmlspecialchars($siteTitle); ?></a>
+            <!-- Brand Logo or Text Title -->
+            <a class="navbar-brand me-0 px-2 fs-6 d-flex align-items-center" href="/">
+                <?php if (!empty($logoUrl)): ?>
+                    <img src="<?php echo htmlspecialchars($logoUrl); ?>" alt="<?php echo htmlspecialchars($siteTitle); ?>" style="max-height: 40px; width: auto;" class="img-fluid">
+                <?php else: ?>
+                    <span><?php echo htmlspecialchars($siteTitle); ?></span>
+                <?php endif; ?>
+            </a>
             
             <div class="d-flex align-items-center ms-auto gap-3">
                 
                 <!-- Bootstrap 5 Theme Switcher Dropdown -->
                 <div class="dropdown">
-                    <button class="btn btn-dark btn-sm dropdown-toggle border-secondary" type="button" id="themeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                    <button class="btn btn-outline-light btn-sm dropdown-toggle border-secondary" type="button" id="themeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                         <i class="fa-solid fa-circle-half-stroke me-1" id="themeIcon"></i>
                         <span id="themeLabel">Auto</span>
                     </button>
@@ -140,9 +168,9 @@ global $currentLang;
 
                 <!-- Language Selector Dropdown -->
                 <form method="GET" class="m-0">
-                    <select name="lang" class="form-select form-select-sm bg-dark text-white border-secondary" onchange="this.form.submit()">
+                    <select name="lang" class="form-select form-select-sm bg-transparent text-white border-secondary" onchange="this.form.submit()">
                         <?php foreach ($availableLangs as $langCode): ?>
-                            <option value="<?php echo $langCode; ?>" <?php echo $currentLang === $langCode ? 'selected' : ''; ?>>
+                            <option value="<?php echo $langCode; ?>" class="bg-dark text-white" <?php echo $currentLang === $langCode ? 'selected' : ''; ?>>
                                 <?php echo strtoupper($langCode); ?>
                             </option>
                         <?php endforeach; ?>
@@ -151,9 +179,9 @@ global $currentLang;
 
                 <div class="navbar-nav flex-row">
                     <?php if (isset($_SESSION['user_id'])): ?>
-                        <a class="nav-link px-2 text-white" href="/logout.php"><i class="fa-solid fa-right-from-bracket me-1"></i> <?php echo __('logout', 'Logout'); ?></a>
+                        <a class="nav-link px-2" href="/logout.php"><i class="fa-solid fa-right-from-bracket me-1"></i> <?php echo __('logout', 'Logout'); ?></a>
                     <?php else: ?>
-                        <a class="nav-link px-2 text-white" href="/login.php"><i class="fa-solid fa-right-to-bracket me-1"></i> <?php echo __('login', 'Login'); ?></a>
+                        <a class="nav-link px-2" href="/login.php"><i class="fa-solid fa-right-to-bracket me-1"></i> <?php echo __('login', 'Login'); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
