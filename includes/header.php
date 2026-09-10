@@ -166,6 +166,16 @@ $sidebarText = get_setting($pdo, 'theme_sidebar_text', '#f8f9fa');
                     </ul>
                 </div>
 
+                <!-- Notifications Bell Icon Dropdown / Modal Trigger (For Logged Staff) -->
+                <?php if (isset($_SESSION['user_id']) && in_array($_SESSION['user_role'] ?? '', ['admin', 'agency', 'agent'], true)): ?>
+                    <button type="button" class="btn btn-outline-light btn-sm position-relative me-2 border-secondary" id="notifBellBtn" data-bs-toggle="modal" data-bs-target="#notificationsModal">
+                        <i class="fa-solid fa-bell"></i>
+                        <span id="notifBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none">
+                            0
+                        </span>
+                    </button>
+                <?php endif; ?>
+
                 <!-- Language Selector Dropdown -->
                 <form method="GET" class="m-0">
                     <select name="lang" class="form-select form-select-sm bg-transparent text-white border-secondary" onchange="this.form.submit()">
@@ -187,4 +197,87 @@ $sidebarText = get_setting($pdo, 'theme_sidebar_text', '#f8f9fa');
             </div>
         </div>
     </header>
+
+    <!-- Internal Notifications Modal -->
+    <div class="modal fade" id="notificationsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content text-start">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title"><i class="fa-solid fa-bell me-2 text-warning"></i> Notifications</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div id="notifListGroup" class="list-group list-group-flush">
+                        <div class="text-center text-muted py-3">Loading notifications...</div>
+                    </div>
+                </div>
+                <div class="modal-footer py-2 justify-content-between">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btnMarkAllRead"><i class="fa-solid fa-check-double me-1"></i> Mark All as Read</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const notifBadge = document.getElementById('notifBadge');
+        const notifList = document.getElementById('notifListGroup');
+        const btnMarkRead = document.getElementById('btnMarkAllRead');
+
+        function fetchNotifications() {
+            fetch('/api/notifications.php?action=get')
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.success) return;
+
+                    // Update Badge
+                    if (data.unread_count > 0) {
+                        notifBadge.textContent = data.unread_count;
+                        notifBadge.classList.remove('d-none');
+                    } else {
+                        notifBadge.classList.add('d-none');
+                    }
+
+                    // Render List
+                    if (!notifList) return;
+                    if (data.items.length === 0) {
+                        notifList.innerHTML = '<div class="text-center text-muted py-3">No notifications received yet.</div>';
+                        return;
+                    }
+
+                    let html = '';
+                    data.items.forEach(item => {
+                        const bgClass = item.is_read == '0' ? 'bg-light fw-bold' : '';
+                        const trackUrl = `/track.php?code=${encodeURIComponent(item.tracking_code || '')}&token=${encodeURIComponent(item.access_token || '')}`;
+
+                        html += `
+                            <a href="${trackUrl}" class="list-group-item list-group-item-action ${bgClass} py-2">
+                                <div class="d-flex w-100 justify-content-between align-items-center">
+                                    <small class="text-primary">${item.title}</small>
+                                    <small class="text-muted" style="font-size: 0.75rem;">${item.created_at}</small>
+                                </div>
+                                <div class="small text-dark mt-1">${item.message}</div>
+                            </a>
+                        `;
+                    });
+                    notifList.innerHTML = html;
+                }).catch(() => {});
+        }
+
+        if (document.getElementById('notifBellBtn')) {
+            fetchNotifications();
+            setInterval(fetchNotifications, 15000); // Polling every 15s
+
+            if (btnMarkRead) {
+                btnMarkRead.addEventListener('click', function() {
+                    fetch('/api/notifications.php?action=mark_read')
+                        .then(res => res.json())
+                        .then(() => fetchNotifications());
+                });
+            }
+        }
+    });
+    </script>
+
     <div class="wrapper">
