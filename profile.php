@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Update Ticket Auto-Assignment Setting (Agencies & Agents only)
-    if ($action === 'update_auto_assign' && in_array($user['role'], ['agency', 'agent'], true)) {
+    if ($action === 'update_auto_assign' && in_array($user['role'], ['admin', 'agency', 'agent'], true)) {
         $autoAssign = isset($_POST['auto_assign_tickets']) ? 1 : 0;
         
         $stmtAssign = $pdo->prepare("UPDATE users SET auto_assign_tickets = ? WHERE id = ?");
@@ -160,7 +160,7 @@ require_once __DIR__ . '/includes/sidebar.php';
         </div>
 
         <!-- Ticket Auto-Assignment Card (For Agencies and Agents) -->
-        <?php if (in_array($user['role'], ['agency', 'agent'], true)): ?>
+        <?php if (in_array($user['role'], ['admin', 'agency', 'agent'], true)): ?>
             <div class="card mb-4 shadow-sm">
                 <div class="card-header bg-dark text-white fw-bold">
                     <i class="fa-solid fa-robot me-1"></i> Ticket Management Settings
