@@ -72,6 +72,10 @@ if (!function_exists('index_exists')) {
 try {
     // --- INCREMENTAL DB MIGRATIONS HERE ---
 
+    // v1.0.17: Add is_banned column to users table
+    if (!column_exists($pdo, 'users', 'is_banned')) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `is_banned` TINYINT(1) NOT NULL DEFAULT '0' AFTER `two_factor_enabled`");
+    }
 
     // v1.0.16: Add auto_assign_tickets column for automatic ticket routing
 if (!column_exists($pdo, 'users', 'auto_assign_tickets')) {
