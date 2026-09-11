@@ -1,6 +1,6 @@
 <?php
 // admin/agencies.php
-// Agency & Agent Management Panel with Single Table View & Nested Agent Modals
+// Agency & Agent Management Panel with Single Table View, Nested Agent Modals & Auto-Assign Controls
 session_start();
 require_once __DIR__ . '/../includes/config.php';
 
@@ -15,7 +15,7 @@ if (!in_array($userRole, ['admin', 'agency'], true)) {
 $success = '';
 $error   = '';
 
-// --- ACTIONS: BAN / UNBAN AGENTS AND AGENCIES ---
+// --- ACTIONS: BAN / UNBAN / AUTO-ASSIGN TOGGLE ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     
     // ACTION 1: Admin Bans/Unbans Agency (Cascades to all assigned Agents)
@@ -53,6 +53,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $stmtAgent->execute([$newStatus, $agentIdToToggle, $userId]);
             }
             $success = "Agent status updated successfully.";
+        }
+    }
+
+    // ACTION 3: Agency or Admin Toggles Auto-Assign setting for an Agent
+    if ($_POST['action'] === 'toggle_agent_auto_assign') {
+        $agentIdToToggle = (int)($_POST['agent_id'] ?? 0);
+        $newAutoAssign   = (int)($_POST['auto_assign_status'] ?? 0);
+
+        if ($agentIdToToggle > 0) {
+            if ($userRole === 'admin') {
+                $stmtAuto = $pdo->prepare("UPDATE users SET auto_assign_tickets = ? WHERE id = ? AND role = 'agent'");
+                $stmtAuto->execute([$newAutoAssign, $agentIdToToggle]);
+            } else {
+                // Agencies can only modify auto-assign for their own agents
+                $stmtAuto = $pdo->prepare("UPDATE users SET auto_assign_tickets = ? WHERE id = ? AND agency_id = ? AND role = 'agent'");
+                $stmtAuto->execute([$newAutoAssign, $agentIdToToggle, $userId]);
+            }
+            $success = "Agent auto-assign preference updated successfully.";
         }
     }
 }
@@ -200,8 +218,8 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                                                                 <th>Agent Username</th>
                                                                                 <th>Email</th>
                                                                                 <th>Status</th>
+                                                                                <th>Auto-Assign</th>
                                                                                 <th>Assigned Tickets</th>
-                                                                                <th>Replies Sent</th>
                                                                                 <th>Joined Date</th>
                                                                                 <th class="text-end">Actions</th>
                                                                             </tr>
@@ -219,8 +237,18 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                                                                             <span class="badge bg-success">Active</span>
                                                                                         <?php endif; ?>
                                                                                     </td>
+                                                                                    <td>
+                                                                                        <!-- Toggle Auto-Assign Switch Form -->
+                                                                                        <form method="POST" action="agencies.php" class="m-0">
+                                                                                            <input type="hidden" name="action" value="toggle_agent_auto_assign">
+                                                                                            <input type="hidden" name="agent_id" value="<?php echo $agent['id']; ?>">
+                                                                                            <input type="hidden" name="auto_assign_status" value="<?php echo !empty($agent['auto_assign_tickets']) ? '0' : '1'; ?>">
+                                                                                            <div class="form-check form-switch m-0" title="Toggle Auto-Assign">
+                                                                                                <input class="form-check-input" type="checkbox" onchange="this.form.submit()" <?php echo !empty($agent['auto_assign_tickets']) ? 'checked' : ''; ?>>
+                                                                                            </div>
+                                                                                        </form>
+                                                                                    </td>
                                                                                     <td><span class="badge bg-primary"><?php echo $stats['assigned']; ?> Tickets</span></td>
-                                                                                    <td><span class="badge bg-info text-dark"><?php echo $stats['replies']; ?> Replies</span></td>
                                                                                     <td><small><?php echo date('Y-m-d', strtotime($agent['created_at'])); ?></small></td>
                                                                                     <td class="text-end">
                                                                                         <!-- Ban / Unban Individual Agent -->
@@ -271,6 +299,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                     <th>Agent Username</th>
                                     <th>Email</th>
                                     <th>Status</th>
+                                    <th>Auto-Assign</th>
                                     <th>Joined Date</th>
                                     <th class="text-center">Actions & Statistics</th>
                                 </tr>
@@ -287,6 +316,17 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                             <?php else: ?>
                                                 <span class="badge bg-success">Active</span>
                                             <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <!-- Toggle Auto-Assign Switch Form -->
+                                            <form method="POST" action="agencies.php" class="m-0">
+                                                <input type="hidden" name="action" value="toggle_agent_auto_assign">
+                                                <input type="hidden" name="agent_id" value="<?php echo $agent['id']; ?>">
+                                                <input type="hidden" name="auto_assign_status" value="<?php echo !empty($agent['auto_assign_tickets']) ? '0' : '1'; ?>">
+                                                <div class="form-check form-switch m-0" title="Toggle Auto-Assign Tickets to this Agent">
+                                                    <input class="form-check-input" type="checkbox" onchange="this.form.submit()" <?php echo !empty($agent['auto_assign_tickets']) ? 'checked' : ''; ?>>
+                                                </div>
+                                            </form>
                                         </td>
                                         <td><small><?php echo date('Y-m-d H:i', strtotime($agent['created_at'])); ?></small></td>
                                         <td class="text-center">
@@ -408,7 +448,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
         }
         if ($('#myAgentsTable').length) {
             $('#myAgentsTable').DataTable({
-                "order": [[ 3, "desc" ]],
+                "order": [[ 4, "desc" ]],
                 "pageLength": 10,
                 "language": {
                     "search": "Filter agents:"
