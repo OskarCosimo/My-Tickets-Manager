@@ -1,6 +1,6 @@
 <?php
 // admin/settings.php
-// Admin configuration settings page with OAuth providers, AI, and Theme Branding Customization
+// Admin configuration settings page with OAuth providers, AI, Theme Branding Customization, Legal links, and Code Injection
 session_start();
 require_once __DIR__ . '/../includes/config.php';
 
@@ -15,7 +15,12 @@ $success = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach ($_POST['settings'] as $key => $value) {
         $stmt = $pdo->prepare("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
-        $stmt->execute([$key, trim($value)]);
+        // We do not trim HTML code injections to preserve formatting
+        if ($key === 'inject_header' || $key === 'inject_footer') {
+            $stmt->execute([$key, $value]);
+        } else {
+            $stmt->execute([$key, trim($value)]);
+        }
     }
     $success = 'Settings updated successfully.';
 }
@@ -57,6 +62,24 @@ $msCallbackUrl      = $baseUrl . '/auth/microsoft-callback.php';
                 </div>
             </div>
 
+            <!-- Legal & Policies Settings -->
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-secondary text-white"><i class="fa-solid fa-scale-balanced me-2"></i> Legal & Policies (Footer Links)</div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Terms of Service URL</label>
+                            <input type="url" name="settings[terms_url]" class="form-control" placeholder="https://example.com/terms" value="<?php echo htmlspecialchars(get_setting($pdo, 'terms_url')); ?>">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Privacy Policy URL</label>
+                            <input type="url" name="settings[privacy_url]" class="form-control" placeholder="https://example.com/privacy" value="<?php echo htmlspecialchars(get_setting($pdo, 'privacy_url')); ?>">
+                        </div>
+                    </div>
+                    <div class="form-text text-muted"><i class="fa-solid fa-circle-info me-1"></i> If you provide a URL, the corresponding link will automatically appear in the public footer. Leave blank to disable.</div>
+                </div>
+            </div>
+
             <!-- Theme & Branding Customization -->
             <div class="card mb-4 shadow-sm">
                 <div class="card-header bg-dark text-white"><i class="fa-solid fa-palette me-2"></i> Theme & Branding Customization</div>
@@ -92,11 +115,25 @@ $msCallbackUrl      = $baseUrl . '/auth/microsoft-callback.php';
                 </div>
             </div>
 
+            <!-- Custom Code Injection -->
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-dark text-white"><i class="fa-solid fa-code me-2"></i> Custom Code Injection</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Header Injection (Before &lt;/head&gt;)</label>
+                        <textarea name="settings[inject_header]" class="form-control font-monospace" rows="4" placeholder="<!-- e.g. Custom meta tags, CSS, or Analytics script -->"><?php echo htmlspecialchars(get_setting($pdo, 'inject_header')); ?></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Footer Injection (Before &lt;/body&gt;)</label>
+                        <textarea name="settings[inject_footer]" class="form-control font-monospace" rows="4" placeholder="<!-- e.g. AdSense script, Live chat widget -->"><?php echo htmlspecialchars(get_setting($pdo, 'inject_footer')); ?></textarea>
+                    </div>
+                </div>
+            </div>
+
             <!-- OAuth SSO Settings -->
             <div class="card mb-4 shadow-sm">
                 <div class="card-header bg-dark text-white"><i class="fa-solid fa-key me-2"></i> OAuth & SSO Login Providers</div>
                 <div class="card-body">
-                    
                     <!-- MYETV OAuth -->
                     <h5>MYETV Integration</h5>
                     <div class="mb-3 form-check">
