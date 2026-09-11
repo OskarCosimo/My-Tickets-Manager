@@ -1,11 +1,30 @@
 <?php
 // includes/footer.php
-// Main footer template file with Theme Switcher and Sidebar toggle handlers
+// Main footer template file with Theme Switcher, Sidebar toggle handlers, Legal Links, and Footer Code Injection
 ?>
     </div> <!-- End .wrapper -->
     <footer class="bg-dark text-white text-center py-3 mt-auto">
         <div class="container">
             <small>&copy; <?php echo date('Y'); ?> <?php echo htmlspecialchars(get_setting($pdo, 'site_title', 'My Tickets Manager')); ?> - Open Source Ticket Management</small>
+            
+            <?php 
+            $termsUrl = get_setting($pdo, 'terms_url', '');
+            $privacyUrl = get_setting($pdo, 'privacy_url', '');
+            
+            if (!empty($termsUrl) || !empty($privacyUrl)): 
+            ?>
+                <div class="mt-2">
+                    <small>
+                        <?php if (!empty($termsUrl)): ?>
+                            <a href="<?php echo htmlspecialchars($termsUrl); ?>" class="text-white-50 text-decoration-none me-3" target="_blank"><?php echo __('terms_of_service', 'Terms of Service'); ?></a>
+                        <?php endif; ?>
+                        
+                        <?php if (!empty($privacyUrl)): ?>
+                            <a href="<?php echo htmlspecialchars($privacyUrl); ?>" class="text-white-50 text-decoration-none" target="_blank"><?php echo __('privacy_policy', 'Privacy Policy'); ?></a>
+                        <?php endif; ?>
+                    </small>
+                </div>
+            <?php endif; ?>
         </div>
     </footer>
     <!-- Bootstrap 5 JS Bundle -->
@@ -102,5 +121,13 @@
     }
 })();
 </script>
+
+<!-- Custom Footer Injection -->
+<?php 
+$footerInjection = get_setting($pdo, 'inject_footer', '');
+if (!empty($footerInjection)) {
+    echo $footerInjection . "\n";
+}
+?>
 </body>
 </html>

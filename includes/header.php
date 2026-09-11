@@ -1,6 +1,6 @@
 <?php
 // includes/header.php
-// Header with Bootstrap 5.3 Theme Switcher, Branding logo, Custom Colors, and language selector
+// Header with Bootstrap 5.3 Theme Switcher, Branding logo, Custom Colors, language selector and Header Code Injection
 require_once __DIR__ . '/config.php';
 $siteTitle = get_setting($pdo, 'site_title', 'My Tickets Manager');
 $availableLangs = get_available_languages();
@@ -121,6 +121,14 @@ $sidebarText = get_setting($pdo, 'theme_sidebar_text', '#f8f9fa');
             }
         }
     </style>
+    
+    <!-- Custom Header Injection -->
+    <?php 
+    $headerInjection = get_setting($pdo, 'inject_header', '');
+    if (!empty($headerInjection)) {
+        echo $headerInjection . "\n";
+    }
+    ?>
 </head>
 <body>
     <header class="navbar navbar-custom sticky-top p-2 shadow">
