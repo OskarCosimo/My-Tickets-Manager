@@ -1,11 +1,12 @@
 <?php
 // admin/dashboard.php
-// Admin & Agent Dashboard with statistics and assigned tickets summary
+// Admin, Agency & Agent Dashboard with statistics and assigned tickets summary
+session_start();
 require_once __DIR__ . '/../includes/config.php';
 
-// Ensure user is authorized as Admin or Agent (Matches tickets.php pattern)
+// Ensure user is authorized as Admin, Agency, or Agent
 $userRole = $_SESSION['user_role'] ?? '';
-if (!in_array($userRole, ['admin', 'agent'], true)) {
+if (!in_array($userRole, ['admin', 'agency', 'agent'], true)) {
     header("Location: /login.php");
     exit;
 }
@@ -20,21 +21,83 @@ $stats = [
 $recentTickets = [];
 
 try {
-    // Fetch ticket statistics safely
-    $stats['total']    = (int)$pdo->query("SELECT COUNT(*) FROM tickets")->fetchColumn();
-    $stats['open']     = (int)$pdo->query("SELECT COUNT(*) FROM tickets WHERE status = 'open'")->fetchColumn();
-    $stats['answered'] = (int)$pdo->query("SELECT COUNT(*) FROM tickets WHERE status = 'answered'")->fetchColumn();
-    $stats['closed']   = (int)$pdo->query("SELECT COUNT(*) FROM tickets WHERE status = 'closed'")->fetchColumn();
+    // Fetch ticket statistics safely based on scope
+    if ($userRole === 'admin') {
+        $stats['total']    = (int)$pdo->query("SELECT COUNT(*) FROM tickets")->fetchColumn();
+        $stats['open']     = (int)$pdo->query("SELECT COUNT(*) FROM tickets WHERE status = 'open'")->fetchColumn();
+        $stats['answered'] = (int)$pdo->query("SELECT COUNT(*) FROM tickets WHERE status = 'answered'")->fetchColumn();
+        $stats['closed']   = (int)$pdo->query("SELECT COUNT(*) FROM tickets WHERE status = 'closed'")->fetchColumn();
 
-    // Fetch recent tickets list
-    $stmt = $pdo->prepare("
-        SELECT t.*, u.username AS assigned_agent 
-        FROM tickets t 
-        LEFT JOIN users u ON t.assigned_to = u.id 
-        ORDER BY t.updated_at DESC LIMIT 10
-    ");
-    $stmt->execute();
-    $recentTickets = $stmt->fetchAll();
+        $stmt = $pdo->prepare("
+            SELECT t.*, u.username AS assigned_agent 
+            FROM tickets t 
+            LEFT JOIN users u ON t.assigned_to = u.id 
+            ORDER BY t.updated_at DESC LIMIT 10
+        ");
+        $stmt->execute();
+        $recentTickets = $stmt->fetchAll();
+    } elseif ($userRole === 'agency') {
+        $userId = $_SESSION['user_id'] ?? 0;
+        $stats['total']    = (int)$pdo->query("SELECT COUNT(*) FROM tickets t LEFT JOIN users u ON t.user_id = u.id LEFT JOIN users a ON t.assigned_to = a.id WHERE a.agency_id = $userId OR u.agency_id = $userId OR t.assigned_to = $userId OR t.assigned_to IS NULL")->fetchColumn();
+        $stats['open']     = (int)$pdo->query("SELECT COUNT(*) FROM tickets t LEFT JOIN users u ON t.user_id = u.id LEFT JOIN users a ON t.assigned_to = a.id WHERE (a.agency_id = $userId OR u.agency_id = $userId OR t.assigned_to = $userId OR t.assigned_to IS NULL) AND t.status = 'open'")->fetchColumn();
+        $stats['answered'] = (int)$pdo->query("SELECT COUNT(*) FROM tickets t LEFT JOIN users u ON t.user_id = u.id LEFT JOIN users a ON t.assigned_to = a.id WHERE (a.agency_id = $userId OR u.agency_id = $userId OR t.assigned_to = $userId OR t.assigned_to IS NULL) AND t.status = 'answered'")->fetchColumn();
+        $stats['closed']   = (int)$pdo->query("SELECT COUNT(*) FROM tickets t LEFT JOIN users u ON t.user_id = u.id LEFT JOIN users a ON t.assigned_to = a.id WHERE (a.agency_id = $userId OR u.agency_id = $userId OR t.assigned_to = $userId OR t.assigned_to IS NULL) AND t.status = 'closed'")->fetchColumn();
+
+        $stmt = $pdo->prepare("
+            SELECT t.*, u.username AS assigned_agent 
+            FROM tickets t 
+            LEFT JOIN users u ON t.assigned_to = u.id 
+            LEFT JOIN users c ON t.user_id = c.id
+            WHERE u.agency_id = ? OR c.agency_id = ? OR t.assigned_to = ? OR t.assigned_to IS NULL
+            ORDER BY t.updated_at DESC LIMIT 10
+        ");
+        $stmt->execute([$userId, $userId, $userId]);
+        $recentTickets = $stmt->fetchAll();
+    } else {
+        $userId = $_SESSION['user_id'] ?? 0;
+
+        // Fetch agent's assigned agency_id
+        $stmtAgCheck = $pdo->prepare("SELECT agency_id FROM users WHERE id = ?");
+        $stmtAgCheck->execute([$userId]);
+        $userAgencyId = $stmtAgCheck->fetchColumn() ?: null;
+
+        if ($userAgencyId) {
+            $whereClause = "(assigned_to = $userId OR assigned_to = $userAgencyId OR user_id = $userId OR id IN (SELECT ticket_id FROM ticket_followers WHERE user_id = $userId))";
+        } else {
+            $whereClause = "(assigned_to = $userId OR user_id = $userId OR id IN (SELECT ticket_id FROM ticket_followers WHERE user_id = $userId))";
+        }
+
+        $stats['total']    = (int)$pdo->query("SELECT COUNT(*) FROM tickets WHERE $whereClause")->fetchColumn();
+        $stats['open']     = (int)$pdo->query("SELECT COUNT(*) FROM tickets WHERE $whereClause AND status = 'open'")->fetchColumn();
+        $stats['answered'] = (int)$pdo->query("SELECT COUNT(*) FROM tickets WHERE $whereClause AND status = 'answered'")->fetchColumn();
+        $stats['closed']   = (int)$pdo->query("SELECT COUNT(*) FROM tickets WHERE $whereClause AND status = 'closed'")->fetchColumn();
+
+        if ($userAgencyId) {
+            $stmt = $pdo->prepare("
+                SELECT t.*, u.username AS assigned_agent 
+                FROM tickets t 
+                LEFT JOIN users u ON t.assigned_to = u.id 
+                WHERE t.assigned_to = ? 
+                   OR t.assigned_to = ? 
+                   OR t.user_id = ? 
+                   OR t.id IN (SELECT ticket_id FROM ticket_followers WHERE user_id = ?)
+                ORDER BY t.updated_at DESC LIMIT 10
+            ");
+            $stmt->execute([$userId, $userAgencyId, $userId, $userId]);
+        } else {
+            $stmt = $pdo->prepare("
+                SELECT t.*, u.username AS assigned_agent 
+                FROM tickets t 
+                LEFT JOIN users u ON t.assigned_to = u.id 
+                WHERE t.assigned_to = ? 
+                   OR t.user_id = ? 
+                   OR t.id IN (SELECT ticket_id FROM ticket_followers WHERE user_id = ?)
+                ORDER BY t.updated_at DESC LIMIT 10
+            ");
+            $stmt->execute([$userId, $userId, $userId]);
+        }
+        $recentTickets = $stmt->fetchAll();
+    }
 } catch (PDOException $e) {
     error_log("Dashboard Query Error: " . $e->getMessage());
 }
@@ -66,14 +129,14 @@ require_once __DIR__ . '/../includes/sidebar.php';
     </div>
 <?php endif; ?>
 
-        <?php if ($_SESSION['user_role'] === 'agency'): ?>
+<?php if ($_SESSION['user_role'] === 'agency'): ?>
     <?php $inviteUrl = "https://" . $_SERVER['HTTP_HOST'] . "/register.php?agency=" . $_SESSION['user_id']; ?>
-    <div class="card mb-4 border-primary">
+    <div class="card mb-4 border-primary shadow-sm">
         <div class="card-header bg-primary text-white">
-            <i class="fa-solid fa-link me-2"></i> Your Agency Registration Link
+            <i class="fa-solid fa-link me-2"></i> Your Agency Referral Registration Link
         </div>
         <div class="card-body">
-            <p class="mb-2">Share this special link with your clients or agents. Anyone who registers using this link will be automatically associated with your agency:</p>
+            <p class="mb-2">Share this special link with your agents. Anyone registering via this link will be automatically associated with your agency:</p>
             <div class="input-group">
                 <input type="text" class="form-control" value="<?php echo $inviteUrl; ?>" id="agencyLinkInput" readonly>
                 <button class="btn btn-outline-primary" type="button" onclick="navigator.clipboard.writeText(document.getElementById('agencyLinkInput').value); alert('Link copied!');">

@@ -17,6 +17,14 @@ if (!in_array($userRole, $allowedRoles, true)) {
 $message = '';
 $error   = '';
 
+// Fetch agent's assigned agency_id if applicable
+$userAgencyId = null;
+if ($userRole === 'agent') {
+    $stmtAgCheck = $pdo->prepare("SELECT agency_id FROM users WHERE id = ?");
+    $stmtAgCheck->execute([$userId]);
+    $userAgencyId = $stmtAgCheck->fetchColumn() ?: null;
+}
+
 // --- PROCESS ADD ASSIGNEE / FOLLOWER ACTION ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_follower') {
     $ticketId = (int)($_POST['ticket_id'] ?? 0);
@@ -137,15 +145,34 @@ if ($userRole === 'admin') {
     ");
     $stmt->execute([$userId, $userId, $userId]);
 } elseif ($userRole === 'agent') {
-    $stmt = $pdo->prepare("
-        SELECT t.*, c.name AS category_name, u.username AS user_username
-        FROM tickets t 
-        LEFT JOIN categories c ON t.category_id = c.id 
-        LEFT JOIN users u ON t.user_id = u.id 
-        WHERE t.assigned_to = ? OR t.assigned_to = (SELECT agency_id FROM users WHERE id = ?) OR t.id IN (SELECT ticket_id FROM ticket_followers WHERE user_id = ?)
-        ORDER BY t.created_at DESC
-    ");
-    $stmt->execute([$userId, $userId, $userId]);
+    if ($userAgencyId) {
+        // Agent with Agency: see tickets assigned to self, assigned to parent agency, created by self, OR followed by self
+        $stmt = $pdo->prepare("
+            SELECT t.*, c.name AS category_name, u.username AS user_username
+            FROM tickets t 
+            LEFT JOIN categories c ON t.category_id = c.id 
+            LEFT JOIN users u ON t.user_id = u.id 
+            WHERE t.assigned_to = ? 
+               OR t.assigned_to = ? 
+               OR t.user_id = ? 
+               OR t.id IN (SELECT ticket_id FROM ticket_followers WHERE user_id = ?)
+            ORDER BY t.created_at DESC
+        ");
+        $stmt->execute([$userId, $userAgencyId, $userId, $userId]);
+    } else {
+        // Independent Agent (No Agency): see only tickets assigned to self, created by self, OR followed by self
+        $stmt = $pdo->prepare("
+            SELECT t.*, c.name AS category_name, u.username AS user_username
+            FROM tickets t 
+            LEFT JOIN categories c ON t.category_id = c.id 
+            LEFT JOIN users u ON t.user_id = u.id 
+            WHERE t.assigned_to = ? 
+               OR t.user_id = ? 
+               OR t.id IN (SELECT ticket_id FROM ticket_followers WHERE user_id = ?)
+            ORDER BY t.created_at DESC
+        ");
+        $stmt->execute([$userId, $userId, $userId]);
+    }
 }
 
 $tickets = $stmt->fetchAll();
