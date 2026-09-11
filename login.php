@@ -1,6 +1,6 @@
 <?php
 // login.php
-// Unified Login page with OAuth integration for MYETV, Google, Facebook, Microsoft, and 2FA verification check
+// Unified Login page with OAuth integration, Ban checks, and Account Approval Verification
 session_start();
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/turnstile.php';
@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$email]);
             $user = $stmt->fetch();
 
-            // Check password using password_verify or fallback to password column check
+            // Validate password using password_verify or legacy fallback
             $passwordValid = false;
             if ($user) {
                 if (!empty($user['password_hash'])) {
@@ -34,8 +34,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($user && $passwordValid) {
-                // Check if 2FA is enabled for this user account
-                if ((int)($user['two_factor_enabled'] ?? 0) === 1 && !empty($user['two_factor_secret'])) {
+                // 1. Check if user account is Banned
+                if (!empty($user['is_banned'])) {
+                    $error = 'Your account has been suspended or banned. Please contact support.';
+                }
+                // 2. Check if account is Approved (Agencies require Admin approval, Agents require Agency approval)
+                elseif (isset($user['is_approved']) && (int)$user['is_approved'] === 0) {
+                    if ($user['role'] === 'agency') {
+                        $error = 'Your agency account registration is pending approval by an Administrator. You will be able to log in once approved.';
+                    } elseif ($user['role'] === 'agent') {
+                        $error = 'Your agent account registration is pending approval by your Agency Manager. You will be able to log in once approved.';
+                    } else {
+                        $error = 'Your account is pending approval by an administrator.';
+                    }
+                }
+                // 3. Process 2FA Verification if enabled
+                elseif ((int)($user['two_factor_enabled'] ?? 0) === 1 && !empty($user['two_factor_secret'])) {
                     $_SESSION['2fa_pending_user'] = [
                         'id'                 => $user['id'],
                         'username'           => $user['username'] ?? $user['email'],
@@ -45,8 +59,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ];
                     header("Location: /login_2fa.php");
                     exit;
-                } else {
-                    // Complete Login directly
+                } 
+                // 4. Complete Direct Login
+                else {
                     $_SESSION['user_id']   = $user['id'];
                     $_SESSION['user_email']= $user['email'];
                     $_SESSION['user_role'] = $user['role'];

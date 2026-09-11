@@ -72,6 +72,11 @@ if (!function_exists('index_exists')) {
 try {
     // --- INCREMENTAL DB MIGRATIONS HERE ---
 
+    // v1.0.27: Add is_approved column to users table if not exists
+if (!column_exists($pdo, 'users', 'is_approved')) {
+    $pdo->exec("ALTER TABLE `users` ADD COLUMN `is_approved` TINYINT(1) NOT NULL DEFAULT '1' AFTER `is_banned`");
+}
+
     // v1.0.19: Create Notifications Table for Internal Platform Alerts
 if (!table_exists($pdo, 'notifications')) {
     $pdo->exec("
