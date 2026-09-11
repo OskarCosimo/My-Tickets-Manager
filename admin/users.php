@@ -1,6 +1,6 @@
 <?php
 // admin/users.php
-// User Management Page with Compact Table View, Dedicated Settings Modal, and Ban Control
+// User Management Page with Account Approval System, Compact Table View, Settings Modal, and Ban Control
 session_start();
 require_once __DIR__ . '/../includes/config.php';
 
@@ -12,6 +12,21 @@ if (!isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'admin') {
 
 $message = '';
 $error = '';
+
+// Process Account Approval / Revocation Request
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'toggle_approval') {
+    $targetUserId = (int)($_POST['user_id'] ?? 0);
+
+    if ($targetUserId > 0) {
+        try {
+            $stmt = $pdo->prepare("UPDATE users SET is_approved = CASE WHEN is_approved = 1 THEN 0 ELSE 1 END WHERE id = ?");
+            $stmt->execute([$targetUserId]);
+            $message = "User approval status updated successfully.";
+        } catch (PDOException $e) {
+            $error = "Database Error: " . $e->getMessage();
+        }
+    }
+}
 
 // Process Ban / Unban Request
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'toggle_ban') {
@@ -26,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             // Toggle ban status
             $stmt = $pdo->prepare("UPDATE users SET is_banned = CASE WHEN is_banned = 1 THEN 0 ELSE 1 END WHERE id = ?");
             $stmt->execute([$targetUserId]);
-            $message = "User status updated successfully.";
+            $message = "User ban status updated successfully.";
         } catch (PDOException $e) {
             $error = "Database Error: " . $e->getMessage();
         }
@@ -62,13 +77,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 $stmtAgencies = $pdo->query("SELECT id, username FROM users WHERE role = 'agency' ORDER BY username ASC");
 $agenciesList = $stmtAgencies->fetchAll();
 
-// Fetch all users with their associated agency name and ban status
+// Fetch all users with their associated agency name, ban status, and approval status
 $stmtUsers = $pdo->query("
-    SELECT u.id, u.username, u.email, u.role, u.agency_id, u.auto_assign_tickets, u.is_banned, u.auth_provider, u.two_factor_enabled, u.created_at,
+    SELECT u.id, u.username, u.email, u.role, u.agency_id, u.auto_assign_tickets, u.is_banned, COALESCE(u.is_approved, 1) AS is_approved, u.auth_provider, u.two_factor_enabled, u.created_at,
            ag.username AS agency_name
     FROM users u
     LEFT JOIN users ag ON u.agency_id = ag.id
-    ORDER BY u.id DESC
+    ORDER BY u.is_approved ASC, u.id DESC
 ");
 $users = $stmtUsers->fetchAll();
 
@@ -98,6 +113,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                 <th>Username / Name</th>
                                 <th>Email</th>
                                 <th>Role</th>
+                                <th>Approval Status</th>
                                 <th>Assigned Agency</th>
                                 <th>Auto-Assign</th>
                                 <th>Registered At</th>
@@ -126,6 +142,13 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                         <span <?php echo $badgeStyle; ?>><?php echo strtoupper($u['role']); ?></span>
                                     </td>
                                     <td>
+                                        <?php if (!empty($u['is_approved'])): ?>
+                                            <span class="badge bg-success"><i class="fa-solid fa-check me-1"></i> Approved</span>
+                                        <?php else: ?>
+                                            <span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i> Pending Approval</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
                                         <?php if ($u['role'] === 'agency'): ?>
                                             <span class="text-muted small"><em>N/A (Agency)</em></span>
                                         <?php elseif ($u['agency_name']): ?>
@@ -144,9 +167,18 @@ require_once __DIR__ . '/../includes/sidebar.php';
                                     <td><small><?php echo htmlspecialchars(date('Y-m-d', strtotime($u['created_at']))); ?></small></td>
                                     <td class="text-end">
                                         <div class="btn-group btn-group-sm" role="group">
-                                            <!-- Dedicated User Settings Modal Trigger Button -->
+                                            <!-- Approve / Revoke Button -->
+                                            <form method="POST" action="users.php" class="d-inline m-0">
+                                                <input type="hidden" name="action" value="toggle_approval">
+                                                <input type="hidden" name="user_id" value="<?php echo (int)$u['id']; ?>">
+                                                <button type="submit" class="btn btn-sm <?php echo empty($u['is_approved']) ? 'btn-success' : 'btn-outline-warning'; ?>" title="<?php echo empty($u['is_approved']) ? 'Approve Account' : 'Revoke Approval'; ?>">
+                                                    <i class="fa-solid <?php echo empty($u['is_approved']) ? 'fa-user-check' : 'fa-user-clock'; ?>"></i>
+                                                </button>
+                                            </form>
+
+                                            <!-- User Settings Modal Trigger Button -->
                                             <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#userModal<?php echo (int)$u['id']; ?>" title="Configure User Settings">
-                                                <i class="fa-solid fa-user-gear me-1"></i> Edit
+                                                <i class="fa-solid fa-user-gear"></i>
                                             </button>
 
                                             <!-- Ban / Unban Button -->
@@ -245,7 +277,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
 <script>
     $(document).ready(function() {
         $('#usersTable').DataTable({
-            "order": [[ 5, "desc" ]],
+            "order": [[ 3, "asc" ]],
             "pageLength": 10,
             "language": {
                 "search": "Filter users:"
