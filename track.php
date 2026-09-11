@@ -12,7 +12,19 @@ $token       = trim($_REQUEST['token'] ?? '');
 $searchEmail = trim($_REQUEST['email'] ?? ($_SESSION['user_email'] ?? ''));
 
 $userRole = $_SESSION['user_role'] ?? '';
-$isStaff  = in_array($userRole, ['admin', 'agency', 'agent'], true);
+$userId   = $_SESSION['user_id'] ?? 0;
+
+// Determine if user has Agency context
+$hasAgency = false;
+if ($userRole === 'agent' && $userId > 0) {
+    $stmtAgCheck = $pdo->prepare("SELECT agency_id FROM users WHERE id = ?");
+    $stmtAgCheck->execute([$userId]);
+    $hasAgency = (bool)$stmtAgCheck->fetchColumn();
+}
+
+// Full Search Exemption (only Code required): Admin, Agency, or Agent with Agency
+$canSearchWithoutEmail = in_array($userRole, ['admin', 'agency'], true) || ($userRole === 'agent' && $hasAgency);
+$isStaff = in_array($userRole, ['admin', 'agency', 'agent'], true);
 
 $ticket      = null;
 $replies     = [];
@@ -21,10 +33,12 @@ $success     = '';
 $isFollowing = false;
 
 if (!empty($code)) {
-    if (!$isStaff && empty($searchEmail)) {
+    // Independent Agents and Normal Users MUST provide the email address
+    if (!$canSearchWithoutEmail && empty($searchEmail)) {
         $error = __('email_required', 'Please enter the email address associated with the ticket.');
     } else {
-        if ($isStaff) {
+        if ($canSearchWithoutEmail) {
+            // Full Staff Search by Code only
             if (!empty($token)) {
                 $stmt = $pdo->prepare("SELECT t.*, c.name as category_name FROM tickets t LEFT JOIN categories c ON t.category_id = c.id WHERE t.tracking_code = ? AND t.access_token = ?");
                 $stmt->execute([$code, $token]);
@@ -33,6 +47,7 @@ if (!empty($code)) {
                 $stmt->execute([$code]);
             }
         } else {
+            // Independent Agent / User Search: Requires matching Tracking Code AND Email
             if (!empty($token)) {
                 $stmt = $pdo->prepare("
                     SELECT t.*, c.name as category_name 
@@ -122,11 +137,11 @@ if (!empty($code)) {
                 if (empty($replyMessage)) {
                     $error = __('message_required', 'Please enter a message before replying.');
                 } else {
-                    $userId = $_SESSION['user_id'] ?? null;
-                    $senderEmail = $userId ? ($_SESSION['user_email'] ?? '') : $searchEmail;
+                    $senderUserId = $_SESSION['user_id'] ?? null;
+                    $senderEmail = $senderUserId ? ($_SESSION['user_email'] ?? '') : $searchEmail;
 
                     $stmtReply = $pdo->prepare("INSERT INTO ticket_replies (ticket_id, user_id, message) VALUES (?, ?, ?)");
-                    if ($stmtReply->execute([$ticket['id'], $userId, $replyMessage])) {
+                    if ($stmtReply->execute([$ticket['id'], $senderUserId, $replyMessage])) {
                         
                         $newStatus = $isStaff ? 'answered' : 'customer_reply';
                         $stmtUpdate = $pdo->prepare("UPDATE tickets SET status = ? WHERE id = ?");
@@ -137,14 +152,14 @@ if (!empty($code)) {
 
                         // Dispatch internal platform notification to followers and assignees
                         $notifTitle = "New reply on ticket #" . $ticket['tracking_code'];
-                        $notifMsg   = "Reply posted by " . ($userId ? ($_SESSION['username'] ?? 'Staff') : ($ticket['guest_name'] ?: 'Customer'));
-                        notify_ticket_followers($pdo, $ticket, $notifTitle, $notifMsg, $userId);
+                        $notifMsg   = "Reply posted by " . ($senderUserId ? ($_SESSION['username'] ?? 'Staff') : ($ticket['guest_name'] ?: 'Customer'));
+                        notify_ticket_followers($pdo, $ticket, $notifTitle, $notifMsg, $senderUserId);
 
                         // Trigger Plugin Hooks (e.g. Discord)
                         trigger_hook('on_ticket_replied', [
                             'ticket' => $ticket,
                             'reply' => ['message' => $replyMessage],
-                            'sender_name' => $userId ? ($_SESSION['user_email'] ?? 'User') : ($ticket['guest_name'] ?: 'Customer')
+                            'sender_name' => $senderUserId ? ($_SESSION['user_email'] ?? 'User') : ($ticket['guest_name'] ?: 'Customer')
                         ]);
 
                         $success = __('reply_sent', 'Your reply has been posted successfully!');
@@ -159,7 +174,7 @@ if (!empty($code)) {
 
     if ($ticket) {
         $stmtReplies = $pdo->prepare("SELECT r.*, u.username FROM ticket_replies r LEFT JOIN users u ON r.user_id = u.id WHERE r.ticket_id = ? ORDER BY r.created_at ASC");
-        $stmtReplies->execute([$ticket['id']]);
+        $stmtReplies.execute([$ticket['id']]);
         $replies = $stmtReplies->fetchAll();
     }
 }
@@ -178,15 +193,20 @@ require_once __DIR__ . '/includes/sidebar.php';
         <h2><?php echo __('track_your_ticket', 'Track Your Ticket'); ?></h2>
         <hr>
 
-        <?php if ($isStaff): ?>
-            <!-- Admin / Staff Information Notice -->
+        <?php if ($canSearchWithoutEmail): ?>
+            <!-- Admin / Agency / Agency Agent Information Notice -->
             <div class="alert alert-info py-2 small mb-3">
-                <i class="fa-solid fa-circle-info me-1"></i> You are logged in as a staff member, so you don't need to enter the email. Normal users must provide both the tracking code and the original email address to view a ticket.
+                <i class="fa-solid fa-circle-info me-1"></i> You are logged in as an Agency Manager / Admin / Agency Agent, so you can search tickets using only the Tracking Code.
+            </div>
+        <?php elseif ($userRole === 'agent'): ?>
+            <!-- Independent Agent Notice -->
+            <div class="alert alert-warning py-2 small mb-3">
+                <i class="fa-solid fa-triangle-exclamation me-1"></i> As an independent agent (no agency assigned), you must enter both the Tracking Code and the associated Email address to search for tickets.
             </div>
         <?php endif; ?>
 
         <form method="GET" action="track.php" class="row g-3 mb-4">
-            <?php if ($isStaff): ?>
+            <?php if ($canSearchWithoutEmail): ?>
                 <div class="col-md-8">
                     <input type="text" name="code" class="form-control" placeholder="Enter Tracking Code (e.g. ABC-123-XYZ)" value="<?php echo htmlspecialchars($code); ?>" required>
                 </div>
@@ -198,7 +218,7 @@ require_once __DIR__ . '/includes/sidebar.php';
                     <input type="text" name="code" class="form-control" placeholder="Tracking Code (e.g. ABC-123-XYZ)" value="<?php echo htmlspecialchars($code); ?>" required>
                 </div>
                 <div class="col-md-4">
-                    <input type="email" name="email" class="form-control" placeholder="Your Ticket Email" value="<?php echo htmlspecialchars($searchEmail); ?>" required>
+                    <input type="email" name="email" class="form-control" placeholder="Ticket Email" value="<?php echo htmlspecialchars($searchEmail); ?>" required>
                 </div>
                 <div class="col-md-3">
                     <button type="submit" class="btn btn-primary w-100"><i class="fa-solid fa-magnifying-glass me-1"></i> <?php echo __('search', 'Search'); ?></button>
