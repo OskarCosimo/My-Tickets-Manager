@@ -174,7 +174,7 @@ if (!empty($code)) {
 
     if ($ticket) {
         $stmtReplies = $pdo->prepare("SELECT r.*, u.username FROM ticket_replies r LEFT JOIN users u ON r.user_id = u.id WHERE r.ticket_id = ? ORDER BY r.created_at ASC");
-        $stmtReplies.execute([$ticket['id']]);
+        $stmtReplies->execute([$ticket['id']]);
         $replies = $stmtReplies->fetchAll();
     }
 }
