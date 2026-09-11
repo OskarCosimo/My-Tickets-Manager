@@ -1,6 +1,6 @@
 <?php
 // track.php
-// Public tracking page with Email verification, Reply capability, Staff status actions, Follow/Unfollow, and Internal Notifications
+// Public tracking page with Email verification, Reply capability, Staff status actions, Activity Logging, and Internal Notifications
 session_start();
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/turnstile.php';
@@ -105,15 +105,29 @@ if (!empty($code)) {
         $isFollowing = (bool)$stmtIsFollow->fetch();
     }
 
-    // Staff Manual Status Update
+    // Staff Manual Status Update + Activity Log Insertion
     if ($ticket && $isStaff && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
         $allowedStatuses = ['open', 'answered', 'customer_reply', 'closed'];
         $newStatus = trim($_POST['status'] ?? '');
 
-        if (in_array($newStatus, $allowedStatuses, true)) {
+        if (in_array($newStatus, $allowedStatuses, true) && $newStatus !== $ticket['status']) {
+            $oldStatus = $ticket['status'];
             $stmtUpdateStatus = $pdo->prepare("UPDATE tickets SET status = ? WHERE id = ?");
             if ($stmtUpdateStatus->execute([$newStatus, $ticket['id']])) {
                 $ticket['status'] = $newStatus;
+                
+                // Log action as a system reply entry
+                $staffName = $_SESSION['username'] ?? 'Staff Member';
+                $logMessage = "<em>System Note: Ticket status changed from <strong>" . strtoupper(str_replace('_', ' ', $oldStatus)) . "</strong> to <strong>" . strtoupper(str_replace('_', ' ', $newStatus)) . "</strong> by <strong>" . htmlspecialchars($staffName) . "</strong> (" . ucfirst($userRole) . ").</em>";
+                
+                $stmtLogReply = $pdo->prepare("INSERT INTO ticket_replies (ticket_id, user_id, message) VALUES (?, ?, ?)");
+                $stmtLogReply->execute([$ticket['id'], $userId, $logMessage]);
+
+                // Notify followers of status change
+                $notifTitle = "Status updated on ticket #" . $ticket['tracking_code'];
+                $notifMsg   = "Status changed to " . strtoupper(str_replace('_', ' ', $newStatus)) . " by " . $staffName;
+                notify_ticket_followers($pdo, $ticket, $notifTitle, $notifMsg, $userId);
+
                 $success = __('status_updated', 'Ticket status updated successfully!');
             } else {
                 $error = __('status_update_failed', 'Failed to update ticket status.');
@@ -173,7 +187,7 @@ if (!empty($code)) {
     }
 
     if ($ticket) {
-        $stmtReplies = $pdo->prepare("SELECT r.*, u.username FROM ticket_replies r LEFT JOIN users u ON r.user_id = u.id WHERE r.ticket_id = ? ORDER BY r.created_at ASC");
+        $stmtReplies = $pdo->prepare("SELECT r.*, u.username, u.role FROM ticket_replies r LEFT JOIN users u ON r.user_id = u.id WHERE r.ticket_id = ? ORDER BY r.created_at ASC");
         $stmtReplies->execute([$ticket['id']]);
         $replies = $stmtReplies->fetchAll();
     }
@@ -194,14 +208,22 @@ require_once __DIR__ . '/includes/sidebar.php';
         <hr>
 
         <?php if ($canSearchWithoutEmail): ?>
-            <!-- Admin / Agency / Agency Agent Information Notice -->
+            <!-- Dynamic Role Clean Information Notice -->
+            <?php 
+                $roleLabel = match($userRole) {
+                    'admin'  => 'Admin',
+                    'agency' => 'Agency Manager',
+                    'agent'  => 'Agent',
+                    default  => 'Staff Member'
+                };
+            ?>
             <div class="alert alert-info py-2 small mb-3">
-                <i class="fa-solid fa-circle-info me-1"></i> You are logged in as an Agency Manager / Admin / Agency Agent, so you can search tickets using only the Tracking Code.
+                <i class="fa-solid fa-circle-info me-1"></i> You are logged in as an <strong><?php echo $roleLabel; ?></strong>, so you can search tickets using only the Tracking Code.
             </div>
         <?php elseif ($userRole === 'agent'): ?>
             <!-- Independent Agent Notice -->
             <div class="alert alert-warning py-2 small mb-3">
-                <i class="fa-solid fa-triangle-exclamation me-1"></i> As an independent agent (no agency assigned), you must enter both the Tracking Code and the associated Email address to search for tickets.
+                <i class="fa-solid fa-triangle-exclamation me-1"></i> As an independent <strong>Agent</strong> (no agency assigned), you must enter both the Tracking Code and the associated Email address to search for tickets.
             </div>
         <?php endif; ?>
 
@@ -268,11 +290,18 @@ require_once __DIR__ . '/includes/sidebar.php';
                 </div>
             </div>
 
-            <h4 class="mb-3"><?php echo __('replies', 'Replies'); ?></h4>
+            <h4 class="mb-3"><?php echo __('replies', 'Replies & Activity'); ?></h4>
             <?php foreach ($replies as $reply): ?>
                 <div class="card mb-3 <?php echo $reply['user_id'] ? 'border-primary' : ''; ?>">
                     <div class="card-header py-1 bg-light d-flex justify-content-between">
-                        <strong><?php echo $reply['username'] ? htmlspecialchars($reply['username']) . ' (Staff)' : htmlspecialchars($ticket['guest_name'] ?: 'Customer'); ?></strong>
+                        <strong>
+                            <?php if ($reply['username']): ?>
+                                <?php echo htmlspecialchars($reply['username']); ?> 
+                                <span class="badge bg-secondary ms-1"><?php echo strtoupper($reply['role'] ?? 'Staff'); ?></span>
+                            <?php else: ?>
+                                <?php echo htmlspecialchars($ticket['guest_name'] ?: 'Customer'); ?>
+                            <?php endif; ?>
+                        </strong>
                         <small class="text-muted"><?php echo $reply['created_at']; ?></small>
                     </div>
                     <div class="card-body">
